@@ -1,5 +1,3 @@
-T License (MIT)
-
 Copyright (c) 2014 Steffan Norberhuis
               2014 Rogier Slag
 
