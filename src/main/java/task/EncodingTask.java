@@ -9,17 +9,28 @@ import java.io.IOException;
  */
 public class EncodingTask implements ITask {
 
-	private static final String INPUT = "video1.avi";
-	private static final String OUTPUT = "output1.flv";
+	private String INPUT;
+	private String OUTPUT;
+
+	public EncodingTask(String inputFile, String outputFile) {
+		this.INPUT = inputFile;
+		this.OUTPUT = outputFile;
+	}
 
 	public Result executeTask() {
 		ProcessBuilder pb = new ProcessBuilder("ffmpeg", "-i", INPUT, OUTPUT);
 		pb.redirectErrorStream();
 		try {
 			Process ffmpeg = pb.start();
+			if (ffmpeg.waitFor() == 0) {
+				return new Result("url", ResultType.Success);
+			}
 		} catch (IOException e) {
 			return new Result("noURL", ResultType.Failure);
+		} catch (InterruptedException e) {
+			return new Result("noURL", ResultType.Failure);
 		}
-		return new Result("url", ResultType.Success);
+		return new Result("noURL", ResultType.Failure);
+
 	}
 }
