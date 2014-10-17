@@ -107,3 +107,19 @@ sympy-plots-for-*.tex/
 
 # xindy
 *.xdy
+
+#Latex
+*.pdf
+
+#Video files
+*.flv
+*.avi
+
+#Extra
+bin/
+.project
+.classpath
+.settings/
+target/
+*.swp
+
