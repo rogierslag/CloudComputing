@@ -15,6 +15,7 @@ import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import lombok.Getter;
 import lombok.Synchronized;
 import lombok.extern.slf4j.Slf4j;
 import org.joda.time.DateTime;
@@ -30,8 +31,14 @@ public class Scheduler {
 	private ScheduledExecutorService executorService = Executors.newScheduledThreadPool(3);
 	private final AmazonS3Client s3Client;
 
+	@Getter
 	private final List<Task> taskQueue = new ArrayList<Task>();
 
+	/**
+	 * Create the scheduler.
+	 *
+	 * Reads the properties, starts and S3 client and starts scheduling the poll tasks
+	 */
 	public Scheduler() {
 		properties = readProperties();
 		log.info("Working with the following properties: {}", properties);
@@ -58,13 +65,17 @@ public class Scheduler {
 		};
 		s3Client = new AmazonS3Client(awsCredentials);
 
-		log.info("Start polling buckets in {} seconds and redo every {} seconds", 0, checkInterval);
+		log.info("Start polling buckets in {} seconds and redo every {} seconds", checkInterval, checkInterval);
 
 		// Every task will start another one in succession. This ensures in case of a high load not all tasks are
 		// interfering and makes it easier to reason about stuff and things
-		executorService.schedule(this.checkForTasks(checkInterval), 0, TimeUnit.SECONDS);
+		executorService.schedule(this.checkForTasks(checkInterval), checkInterval, TimeUnit.SECONDS);
 	}
 
+	/**
+	 * Reads the properties file and load them into a Properties object
+	 * @return the created Properties object
+	 */
 	private Properties readProperties() {
 		try {
 			FileInputStream propertiesFile = new FileInputStream("scheduler.properties");
@@ -83,6 +94,11 @@ public class Scheduler {
 		}
 	}
 
+	/**
+	 *
+	 * @param rescheduleInterval how many seconds after finishing the next poll should be done
+	 * @return A Runnable object for the executorservice
+	 */
 	@Synchronized
 	private Runnable checkForTasks(int rescheduleInterval) {
 		final int interval = rescheduleInterval;
@@ -122,6 +138,14 @@ public class Scheduler {
 				executorService.schedule(checkForTasks(interval), interval, TimeUnit.SECONDS);
 			}
 		};
+	}
+
+	/**
+	 * Stops the remaining threads which the scheduler has spawned
+	 */
+	public void stop() {
+		log.info("Stopping the scheduler");
+		executorService.shutdownNow();
 	}
 
 	public void removeTaskFromQueue(Task task) {
