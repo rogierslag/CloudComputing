@@ -19,7 +19,7 @@ public class TestTaskManagerTest {
 		// Act
 		List<String> result = target.getTestVideos();
 		// Assert
-		Assert.assertEquals("testVideo.avi", result.get(0));
+		Assert.assertEquals("testvideos/testVideo.avi", result.get(0));
 	}
 
 }
