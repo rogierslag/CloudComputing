@@ -51,8 +51,8 @@ public class SchedulerUnitTest {
 		try {
 			Scheduler scheduler = new Scheduler(main.credentials, main.properties);
 
-			AmazonS3Client s3Client = getPrivateField(scheduler, AmazonS3Client.class, "s3Client");
-			String inputBucket = getPrivateField(scheduler, Properties.class, "properties").getProperty("aws.s3" + ".input");
+			AmazonS3Client s3Client = new AmazonS3Client(main.credentials);
+			String inputBucket = main.properties.getProperty("aws.s3" + ".input");
 			long pollDelay = Long.parseLong(getPrivateField(scheduler, Properties.class, "properties").getProperty("scheduler.check_every_x_seconds")) * 1000;
 
 			// Ensure bucket is empty

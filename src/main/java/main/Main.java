@@ -7,6 +7,7 @@ import java.util.Properties;
 
 import lombok.extern.slf4j.Slf4j;
 import scheduler.Scheduler;
+import workload.WorkLoadGenerator;
 import amazon.Credentials;
 
 @Slf4j
@@ -26,6 +27,8 @@ public class Main {
 		// Create the Scheduler.
 		new Scheduler(credentials, properties);
 		// Create the workload generator.
+		WorkLoadGenerator wlg = new WorkLoadGenerator(credentials, properties);
+		new Thread(wlg).start();
 	}
 
 	/**
