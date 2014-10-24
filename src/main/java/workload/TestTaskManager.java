@@ -49,14 +49,15 @@ public class TestTaskManager {
 	 * @throws IOException
 	 */
 	public TestTask getOldTask() throws IOException {
-		if(previousTask.size()> 0){
-		Random rdm = new Random();
-		String taskName = previousTask.get(rdm.nextInt(previousTask.size()));
-		// A random video is added, because it will just be tretrieved from the
-		// cache by the system.
-		return new TestTask(taskName, getRandomTestVideo());
-		}else{
-			getNewTask()
+		if (previousTask.size() > 0) {
+			Random rdm = new Random();
+			String taskName = previousTask.get(rdm.nextInt(previousTask.size()));
+			// A random video is added, because it will just be tretrieved from
+			// the
+			// cache by the system.
+			return new TestTask(taskName, getRandomTestVideo());
+		} else {
+			return getNewTask();
 		}
 	}
 
@@ -73,6 +74,7 @@ public class TestTaskManager {
 		if (!folder.exists()) {
 			throw new IOException("Directory with test videos is missing.");
 		}
+		log.info("reading all videos to be used for workload generation.");
 		List<String> files = new ArrayList<String>();
 		for (final File fileEntry : folder.listFiles()) {
 			if (!fileEntry.isDirectory()) {

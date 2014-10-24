@@ -16,15 +16,15 @@ public class WorkloadGeneratorIntegrationTest {
 	public void test_generateTask() throws IOException {
 		// Arrange
 		Main main = new Main();
-		AmazonS3Client s3Client = new AmazonS3Client(main.credentials);
-		String inputBucket = main.properties.getProperty("aws.s3" + ".input");
+		AmazonS3Client s3Client = new AmazonS3Client(main.getCredentials());
+		String inputBucket = main.getProperties().getProperty("aws.s3.input");
 
 		// Ensure bucket is empty
 		ObjectListing list = s3Client.listObjects(inputBucket);
 		Assert.assertEquals("Input bucket is not empty", 0, list.getObjectSummaries().size());
 
 		// Act
-		String taskName = new WorkLoadGenerator(main.credentials, main.properties).generateTask();
+		String taskName = new WorkLoadGenerator(main.getCredentials(), main.getProperties()).generateTask();
 
 		// Assert
 		// Ensure bucket contains the test file

@@ -28,7 +28,7 @@ public class SchedulerUnitTest {
 	 * This tests whether the properties file is correctly loaded and contains the correct property values
 	 */
 	public void test_initialization() {
-		Scheduler scheduler = new Scheduler(main.credentials, main.properties);
+		Scheduler scheduler = new Scheduler(main.getCredentials(), main.getProperties());
 
 		Properties properties = getPrivateField(scheduler, Properties.class, "properties");
 		Assert.assertTrue(ensureProperty(properties, "aws.s3.input"));
@@ -49,10 +49,10 @@ public class SchedulerUnitTest {
 		long allowForNetworkDelays = 2000;
 
 		try {
-			Scheduler scheduler = new Scheduler(main.credentials, main.properties);
+			Scheduler scheduler = new Scheduler(main.getCredentials(), main.getProperties());
 
-			AmazonS3Client s3Client = new AmazonS3Client(main.credentials);
-			String inputBucket = main.properties.getProperty("aws.s3" + ".input");
+			AmazonS3Client s3Client = new AmazonS3Client(main.getCredentials());
+			String inputBucket = main.getProperties().getProperty("aws.s3.input");
 			long pollDelay = Long.parseLong(getPrivateField(scheduler, Properties.class, "properties").getProperty("scheduler.check_every_x_seconds")) * 1000;
 
 			// Ensure bucket is empty

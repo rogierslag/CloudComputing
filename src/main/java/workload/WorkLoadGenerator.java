@@ -41,18 +41,17 @@ public class WorkLoadGenerator implements Runnable {
 	 */
 	public String generateTask() throws IOException {
 		// Randomly decide if a previously scheduled task will be created or
-		// a
-		// new task.
+		// a new task.
 		log.trace("Created a new task.");
 		TestTask task;
 		double newTask = random.nextDouble();
 		if (newTask >= newTaskThreshold) {
 			// create a new Task
-			log.trace("requested a new task.");
+			log.info("requested a new task.");
 			task = testFiles.getNewTask();
 		} else {
 			// create a previously scheduled task.
-			log.trace("requested a previous task.");
+			log.info("requested a previous task.");
 			task = testFiles.getOldTask();
 		}
 		// Ensure bucket contains the test file
@@ -66,7 +65,7 @@ public class WorkLoadGenerator implements Runnable {
 				generateTask();
 				// Timeout
 				int timeout = random.nextInt(timeoutMax - timeoutMinimum) + timeoutMinimum;
-				new Thread().sleep(timeout);
+				Thread.sleep(timeout);
 			}
 		} catch (IOException io) {
 			log.error(io.getMessage());

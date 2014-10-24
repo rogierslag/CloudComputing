@@ -5,6 +5,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Properties;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import scheduler.Scheduler;
 import workload.WorkLoadGenerator;
@@ -13,8 +14,10 @@ import amazon.Credentials;
 @Slf4j
 public class Main {
 
-	public Properties properties;
-	public Credentials credentials;
+	@Getter
+	private Properties properties;
+	@Getter
+	private Credentials credentials;
 
 	public Main() {
 		// Read in the properties.
@@ -46,10 +49,10 @@ public class Main {
 		} catch (FileNotFoundException e) {
 			// A problem was found, so returning to sane defaults happens in the
 			// app
-			log.error("Triggered an FileNotFound error when trying to read the properties file: {}", e);
+			log.error("Triggered an FileNotFound error when trying to read the properties file.", e);
 			return new Properties();
 		} catch (IOException e) {
-			log.error("Triggered an IO error when trying to read the properties file: {}", e);
+			log.error("Triggered an IO error when trying to read the properties file.", e);
 			return new Properties();
 		}
 	}
