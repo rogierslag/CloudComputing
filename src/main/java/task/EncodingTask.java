@@ -1,6 +1,9 @@
-package main.java.task;
+package task;
 
 import java.io.IOException;
+
+import task.ITask;
+import task.ResultType;
 
 /**
  * Task that can be scheduled and executed.

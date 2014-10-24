@@ -1,11 +1,7 @@
-package test.java.task;
+package task;
 
 import java.io.File;
 import java.io.IOException;
-
-import main.java.task.EncodingTask;
-import main.java.task.Result;
-import main.java.task.ResultType;
 
 import org.junit.After;
 import org.junit.Assert;

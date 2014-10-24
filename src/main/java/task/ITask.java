@@ -1,5 +1,4 @@
-package main.java.task;
-
+package task;
 
 /**
  * Interface for every schedulable Task

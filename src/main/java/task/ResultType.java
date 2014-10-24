@@ -1,6 +1,5 @@
-package main.java.task;
+package task;
 
 public enum ResultType {
-	Success,
-	Failure
+	Success, Failure
 }
