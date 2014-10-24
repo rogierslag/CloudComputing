@@ -77,6 +77,32 @@ public class SchedulerUnitTest {
 		}
 	}
 
+	@Test
+	public void test_provisioning() {
+		Scheduler s = new Scheduler();
+		Assert.assertEquals("We have no nodes",0,s.getNodes().size());
+		s.provisionNewNode();
+		Assert.assertEquals("We have one node", 1, s.getNodes().size());
+		s.provisionNewNode();
+		Assert.assertEquals("We have two nodes", 2, s.getNodes().size());
+		s.provisionNewNode();
+		Assert.assertEquals("We have three nodes", 3, s.getNodes().size());
+		try {
+			Thread.sleep(10000);
+		}
+		catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+		Assert.assertEquals("We have three nodes", 3, s.getNodes().size());
+		s.destroyExistingNode(s.getNodes().get(0));
+		Assert.assertEquals("We have two nodes", 2, s.getNodes().size());
+		s.destroyExistingNode(s.getNodes().get(0));
+		Assert.assertEquals("We have one node", 1, s.getNodes().size());
+		s.destroyExistingNode(s.getNodes().get(0));
+		Assert.assertEquals("We have no nodes",0,s.getNodes().size());
+		s.stop();
+	}
+
 	/**
 	 * This is a simple helper function to check if a property exists in a Property object
 	 * @param properties The property object
