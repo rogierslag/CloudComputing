@@ -7,3 +7,7 @@ scheduler.max_tasks_per_node = 3
 scheduler.add_node_if_queue_over = 5
 scheduler.kill_node_if_idle_for = 5
 scheduler.check_every_x_seconds = 15
+
+workgenerator.chance_old_task = 0.1
+workgenerator.timeout_min_ms = 3000
+workgenerator.timeout_max_ms = 10000
