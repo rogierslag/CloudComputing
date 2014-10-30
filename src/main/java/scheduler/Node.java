@@ -30,4 +30,8 @@ public class Node {
 		this.idle_since = DateTime.now();
 	}
 
+	public boolean isIdle() {
+		return this.assignedTasks.isEmpty();
+	}
+
 }

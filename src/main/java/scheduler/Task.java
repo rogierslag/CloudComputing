@@ -10,7 +10,6 @@ import org.joda.time.DateTime;
  */
 @AllArgsConstructor
 @Data
-@ToString
 public class Task {
 
 	private String inputFile;
@@ -37,7 +36,10 @@ public class Task {
 			return this.inputFile.equals(that.inputFile);
 		}
 		return false;
+	}
 
+	public String toString() {
+		return String.format("[%s] %s %s",status,inputFile,outputFile);
 	}
 
 }
