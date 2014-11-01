@@ -82,43 +82,46 @@ public class Worker implements IMessageHandler {
 				// This is a better and faster way to copy to S3 (otherwise timeouts)
 				TransferManager tx = new TransferManager(main.getCredentials());
 
-				try {
-					log.info("Copying the file to myself");
-					File file = new File("/tmp/currentInputFile");
-					Download dl = tx.download(main.getProperties().getProperty("aws.s3.input"), inputFile,
-							file);
-					dl.waitForCompletion();
+				for ( int i = 0; i < 3; i++) {
+					try {
+						log.info("Copying the file to myself");
+						File file = new File("/tmp/currentInputFile");
+						Download dl = tx.download(main.getProperties().getProperty("aws.s3.input"), inputFile,
+								file);
+						dl.waitForCompletion();
 
-					log.info("Got the file locally now!");
+						log.info("Got the file locally now!");
 
-					log.info("Started conversion");
-					EncodingTask et = new EncodingTask("/tmp/currentInputFile", "/tmp/currentOutputFile.mp4");
-					Result r = et.executeTask();
-					log.info("Result was {}", r.type);
-					if (r.type == ResultType.Success) {
-						Upload ul = tx.upload(main.getProperties().getProperty("aws.s3.output"), inputFile,
-								new File("/tmp/currentOutputFile.mp4"));
-						ul.waitForCompletion();
+						log.info("Started conversion");
+						EncodingTask et = new EncodingTask("/tmp/currentInputFile", "/tmp/currentOutputFile.mp4");
+						Result r = et.executeTask();
+						log.info("Result was {}", r.type);
+						if (r.type == ResultType.Success) {
+							Upload ul = tx.upload(main.getProperties().getProperty("aws.s3.output"), inputFile,
+									new File("/tmp/currentOutputFile.mp4"));
+							ul.waitForCompletion();
 
-						// Communicate back, delete from from input bucket
-						log.info("conversion was done and file waz sent back to S3");
-						tx.shutdownNow();
-						// s3Client.deleteObject(main.getProperties().getProperty("aws.s3.input"),inputFile);
+							// Communicate back, delete from from input bucket
+							log.info("conversion was done and file waz sent back to S3");
+							tx.shutdownNow();
+							// s3Client.deleteObject(main.getProperties().getProperty("aws.s3.input"),inputFile);
 
-						ClusterMessage m = new ClusterMessage();
-						m.setReceiverIdentifier("scheduler");
-						m.setReceiverType(Communicator.type.SCHEDULER);
-						m.setMessageType("assignment-done");
-						Map<String, Object> map = new HashMap<String, Object>();
-						map.put("inputFile", inputFile);
-						map.put("outputFile", outputFile);
-						m.setData(map);
-						sendMessage(m);
-						return;
+							ClusterMessage m = new ClusterMessage();
+							m.setReceiverIdentifier("scheduler");
+							m.setReceiverType(Communicator.type.SCHEDULER);
+							m.setMessageType("assignment-done");
+							Map<String, Object> map = new HashMap<String, Object>();
+							map.put("inputFile", inputFile);
+							map.put("outputFile", outputFile);
+							m.setData(map);
+							sendMessage(m);
+							return;
+						}
 					}
-				}
-				catch (Exception e) {
-					log.error("Something went terribly wrong", e);
+					catch (Exception e) {
+						log.error("Something went terribly wrong", e);
+					}
+					log.warn("Iteration {} of 3 failed.",i);
 				}
 				tx.shutdownNow();
 
