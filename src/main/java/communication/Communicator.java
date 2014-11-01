@@ -23,10 +23,20 @@ public class Communicator {
 	private Communicator.type myType;
 	private String myIdentifier;
 
+	/**
+	 * Initialize a scheduler communicator
+	 * @param handler the IMessageHandler to handle incoming messages
+	 */
 	public Communicator(IMessageHandler handler) {
 		this(handler, type.SCHEDULER,"scheduler");
 	}
 
+	/**
+	 * Initialize a worker communicator
+	 * @param handler the IMessageHandler to handle incoming messages
+	 * @param type The type (usually WORKER)
+	 * @param identifier the identifier (AWS EC2 Instance ID)
+	 */
 	public Communicator(IMessageHandler handler, type type, String identifier) {
 		if ( identifier == null ) {
 			throw new InvalidParameterException();
@@ -35,7 +45,6 @@ public class Communicator {
 		myType = type;
 		try {
 			channel = new JChannel(new File("jgroups_discovery.xml"));
-			log.info(channel.getAddressAsString());
 			channel.setReceiver(new Receiver(handler,type,identifier));
 			channel.connect("CloudComputing");
 
@@ -50,6 +59,12 @@ public class Communicator {
 		}
 	}
 
+	/**
+	 * Send a message to the cluster
+	 *
+	 * The method sets the Sender* itself
+	 * @param m the message to send
+	 */
 	public void send(ClusterMessage m) {
 		m.setSenderType(this.myType);
 		m.setSenderIdentifier(this.myIdentifier);
@@ -58,7 +73,6 @@ public class Communicator {
 		msg.setDest(null);
 		try {
 			channel.send(msg);
-//			log.info("Just sent the message with contents: {}", m);
 		}
 		catch (Exception e) {
 			e.printStackTrace();

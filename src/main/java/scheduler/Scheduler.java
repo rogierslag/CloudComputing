@@ -2,7 +2,6 @@ package scheduler;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
-import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -63,6 +62,7 @@ public class Scheduler implements IMessageHandler {
 	private Communicator comm;
 	private ArrayList<String> healthcheckReplies;
 	private HashMap<String, Object> healthcheckMap;
+	private HashMap<String, Integer> missedHealthchecks = new HashMap<String, Integer>();
 
 	/**
 	 * Create the scheduler. Reads the properties, starts and S3 client and starts scheduling the poll tasks
@@ -90,44 +90,80 @@ public class Scheduler implements IMessageHandler {
 		executorService.schedule(this.checkForNodeAdjustments(checkInterval), checkInterval, TimeUnit.SECONDS);
 
 		comm = new Communicator(this);
-		executorService.scheduleWithFixedDelay(this.checkForClusterLiveness(), 1, 5, TimeUnit.SECONDS);
+		executorService.scheduleWithFixedDelay(this.checkForClusterLiveness(), 10, 10, TimeUnit.SECONDS);
 
 		executorService.scheduleWithFixedDelay(this.assignTaskToNode(), 15, 10, TimeUnit.SECONDS);
 	}
 
+	/**
+	 * Checks all the nodes in the cluster to determine if they are still alive. In case a host does not respond to
+	 * three healthchecks in a row, it is removed from the cluster and also terminated by EC2.
+	 *
+	 * @return Runnable for the executorservice
+	 */
 	@Synchronized
 	private Runnable checkForClusterLiveness() {
 		return new Runnable() {
 			public void run() {
-//				log.info("The following nodes were alive during the last healthcheck: {}", healthcheckReplies);
+				log.info("The following nodes were alive during the last healthcheck: {}",
+						healthcheckReplies);
 
 				if (healthcheckReplies != null) {
-					// Terminate nodes which were not alive
+
+					/*
+					 * We check every node in the `nodes` arrayList. If it did not reply to the healthcheck,
+					 * we increase
+					 * the missedhealthcheck by one 1 for that host. Once it goes over 3, the node is terminated.
+					 *
+					 * If it does respond an entry of the missedhealthcheck is removed (if applicable)
+					 */
 					List<Node> toTerminate = new ArrayList<Node>();
 					for (Node n : nodes) {
 						if (!healthcheckReplies.contains(n.getInstanceId())) {
-							toTerminate.add(n);
-							for (Task t : n.getAssignedTasks()) {
-								t.setStatus(Task.Status.QUEUED);
-								t.setAssignedNode(null);
+							if (missedHealthchecks.containsKey(n.getInstanceId())) {
+								int missedCount = missedHealthchecks.get(n.getInstanceId()) + 1;
+								if (missedCount > 3) {
+									log.warn("{} missed over 3 healthchecks, terminating", n);
+									toTerminate.add(n);
+									for (Task t : n.getAssignedTasks()) {
+										t.setStatus(Task.Status.QUEUED);
+										t.setAssignedNode(null);
+									}
+								}
+								else {
+									log.warn("{} missed {} healthchecks", n,
+											missedCount);
+									missedHealthchecks.put(n.getInstanceId(),
+											missedCount);
+								}
 							}
+							else {
+								missedHealthchecks.put(n.getInstanceId(), 1);
+							}
+
+						}
+						else {
+							missedHealthchecks.remove(n.getInstanceId());
 						}
 					}
-					for ( Node n : toTerminate) {
-						log.info("Destroying node {}",n);
-						destroyExistingNode(n,true);
+					for (Node n : toTerminate) {
+						log.info("Destroying node {}", n);
+						destroyExistingNode(n, true);
 					}
 
-//					log.info("I should terminate the following nodes: {}", toTerminate);
 				}
 
+				/*
+				 * Send a new round of healthcheck messages.
+				 * The map we send with random data ensures we know the replies are recent,
+				 * hence nodes are not a few minutes behind with replying
+				 */
 				healthcheckReplies = new ArrayList<String>();
 				healthcheckMap = new HashMap<String, Object>();
 				healthcheckMap.put("hash", UUID.randomUUID());
 				ClusterMessage m = new ClusterMessage();
 				m.setMessageType("healthcheck");
 				m.setData(healthcheckMap);
-
 				sendMessage(m);
 			}
 		};
@@ -155,39 +191,40 @@ public class Scheduler implements IMessageHandler {
 				else {
 					log.warn("Output bucket was not defined in properties file: {}", properties);
 				}
-//				log.info("About to do a run of the input bucket: {}", inputBucket);
 
 				// List the object and iterate through them
 				ObjectListing list = s3Client.listObjects(inputBucket);
 				for (S3ObjectSummary object : list.getObjectSummaries()) {
 					Task tmp = new Task(object.getKey());
-					// The equals only checks on the `inputFile` so we can
-					// safely do this
+					/* The equals only checks on the `inputFile` so we can
+					 * safely do this
+					 */
 					if (!taskQueue.contains(tmp)) {
-						// If we do not yet have the task, add the other data
-						// and schedule it
+						/* If we do not yet have the task, add the other data
+						 * and schedule it
+						 */
 						tmp.setCreated_at(DateTime.now());
 						tmp.setOutputBucket(outputBucket);
-						tmp.setOutputFile(UUID.randomUUID() + ".mp4");
+						tmp.setOutputFile(tmp.getInputFile() + ".mp4");
 						tmp.setStatus(Task.Status.QUEUED);
-						// Should also assign to a node, but will do that later
-						// (separate method etc)
+						// the assignment to a node is done by another method
 						taskQueue.add(tmp);
 						log.info("Added task to scheduler queue: {}", tmp);
 					}
 					else {
 						// We have a precomputed one!
 						// So we should definitely do something here
+						// TODO
 					}
 				}
-//				log.info("Done with a run of the input bucket. Current list is {}", taskQueue);
 				executorService.schedule(checkForTasks(interval), interval, TimeUnit.SECONDS);
 			}
 		};
 	}
 
 	/**
-	 * Checks if we need to adjust our node count and does do if required
+	 * Checks if we need to adjust our node count and does do if required.
+	 * The log messages make this methods relatively self-explanatory
 	 *
 	 * @param rescheduleInterval after how many seconds a recheck should be done
 	 * @return Runnable for the scheduler
@@ -209,7 +246,6 @@ public class Scheduler implements IMessageHandler {
 					provisionNewNode();
 				}
 				else if (waitingTasks.size() == 0 && !nodes.isEmpty()) {
-					log.info("We have no tasks, but we do have nodes. Trying to delete a node");
 					Node toRemove = null;
 					for (Node toCheck : nodes) {
 						if (toCheck.getAssignedTasks().isEmpty()) {
@@ -228,17 +264,27 @@ public class Scheduler implements IMessageHandler {
 					log.info("A task was waiting for more than 10 minutes, which is long, so we need a new node");
 					provisionNewNode();
 				}
+				else if (waitingTasks.size() >= 3 * nodes.size()) {
+					log.info("There are currently 3 times more tasks than nodes, so we should add capacity");
+					provisionNewNode();
+				}
 				else {
 					log.info("Apparantly we do not need more nodes than we already have: {}", nodes);
 				}
 
-				log.info("Scheduling the next node adjustment in {} seconds", rescheduleInterval);
 				executorService.schedule(checkForNodeAdjustments(rescheduleInterval), rescheduleInterval,
 						TimeUnit.SECONDS);
 			}
 		};
 	}
 
+	/**
+	 * Assigns waiting tasks to nodes.
+	 * It therefor picks a free node and the longest-waiting task, and matches them. In case there are no waiting tasks
+	 * or free nodes, it does nothing
+	 *
+	 * @return
+	 */
 	@Synchronized
 	private Runnable assignTaskToNode() {
 		return new Runnable() {
@@ -246,7 +292,6 @@ public class Scheduler implements IMessageHandler {
 				Node assignTo = getIdleNode();
 				Task assignTask = getFirstTask();
 				if (assignTo == null || assignTask == null) {
-//					log.info("No free nodes or no tasks");
 					return;
 				}
 
@@ -268,6 +313,10 @@ public class Scheduler implements IMessageHandler {
 		};
 	}
 
+	/**
+	 * Get the first waiting task
+	 * @return The task which was waiting for the longest time or null if no waiting task was found
+	 */
 	private Task getFirstTask() {
 		if (taskQueue.size() > 0) {
 			for (Task t : taskQueue) {
@@ -279,6 +328,10 @@ public class Scheduler implements IMessageHandler {
 		return null;
 	}
 
+	/**
+	 * Get an idle node
+	 * @return An idle node or null if no idle node was present
+	 */
 	private Node getIdleNode() {
 		for (Node n : nodes) {
 			if (n.isIdle()) {
@@ -288,16 +341,21 @@ public class Scheduler implements IMessageHandler {
 		return null;
 	}
 
+	/**
+	 * Destroy a node it possible (no force)
+	 * @param remove The node to be removed
+	 */
 	public void destroyExistingNode(Node remove) {
-		destroyExistingNode(remove,false);
+		destroyExistingNode(remove, false);
 	}
 
 	/**
 	 * Destroys a node and removes it from the list of nodes if it was in there
 	 *
 	 * @param remove The node to remove
+	 * @param force  Whether or not the node should forcibly be removed (hence even with running tasks)
 	 */
-	public void destroyExistingNode(Node remove,boolean force) {
+	public void destroyExistingNode(Node remove, boolean force) {
 		if (isDestroying) {
 			// If we are already destroying a node, don't destroy another
 			return;
@@ -305,6 +363,7 @@ public class Scheduler implements IMessageHandler {
 		isDestroying = true;
 
 		if (!force && !remove.getAssignedTasks().isEmpty()) {
+			// In case the node has tasks and we are not forcing destroying, return and do nothing
 			return;
 		}
 
@@ -346,6 +405,9 @@ public class Scheduler implements IMessageHandler {
 		log.info("New instance has instanceId '{}'", instanceId);
 		String privateIp = null;
 
+		/* We dont get the IP from amazon directly, so we have to poll for it. Using a loop is the easiest way, since
+		 * there is no push possible of the information
+		 */
 		for (int i = 0; i < 20; i++) {
 			try {
 				DescribeInstancesRequest describeInstance = new DescribeInstancesRequest().withInstanceIds(instanceId);
@@ -371,6 +433,11 @@ public class Scheduler implements IMessageHandler {
 			}
 		}
 
+		/*
+		 * Using the `withUserData` method we install software on the node, however we also need to start it
+		 * The method `startNode` handles exactly that and does the maven magic. Once it returns the node is ready for
+		 * production
+		 */
 		try {
 			log.info("Starting the software on the new node");
 			startNode(privateIp, instanceId, properties);
@@ -404,6 +471,7 @@ public class Scheduler implements IMessageHandler {
 			ec2Client.terminateInstances(terminateRequest);
 		}
 
+		// Other may start to create nodes again
 		isCreating = false;
 	}
 
@@ -415,7 +483,11 @@ public class Scheduler implements IMessageHandler {
 		executorService.shutdownNow();
 	}
 
-	public void removeTaskFromQueue(Task taskRepresentation) {
+	/**
+	 * Set a task in the QUEUE to finished
+	 * @param taskRepresentation A task object with the same inputfile field, so we can find the actual task in the queue
+	 */
+	public void removeTaskFromQueue(Task taskRepresentation, Task.Status status) {
 		Task task = null;
 		for (Task t : taskQueue) {
 			if (t.equals(taskRepresentation)) {
@@ -424,35 +496,63 @@ public class Scheduler implements IMessageHandler {
 			}
 		}
 		log.info("Done with task: {}", task);
-		task.setStatus(Task.Status.FINISHED);
+		task.setStatus(status);
 	}
 
+	/**
+	 * Handle an incoming message
+	 * @param m the message which was received
+	 */
 	public void handleMessage(ClusterMessage m) {
+		// Being the scheduler, I should handle healthcheck response
 		if (m.getMessageType().equals("healthcheck-response")) {
 			receivedHealthCheckReply(m);
 		}
+		// Additionally, if a node reports success I should update my status
 		else if (m.getMessageType().equals("assignment-done")) {
 			Task t = new Task((String) m.getData().get("inputFile"));
-			removeTaskFromQueue(t);
+			removeTaskFromQueue(t, Task.Status.FINISHED);
 			for (Node n : nodes) {
 				if (n.getInstanceId().equals(m.getSenderIdentifier())) {
 					n.getAssignedTasks().remove(t);
-					n.setIdle_since(DateTime.now());
+				}
+			}
+		}
+		// And if a node reports a failure, I should be sad and update my status
+		else if (m.getMessageType().equals("assignment-failed")) {
+			Task t = new Task((String) m.getData().get("inputFile"));
+			removeTaskFromQueue(t, Task.Status.FAILED);
+			for (Node n : nodes) {
+				if (n.getInstanceId().equals(m.getSenderIdentifier())) {
+					n.getAssignedTasks().remove(t);
 				}
 			}
 		}
 	}
 
+	/**
+	 * Send a message to the cluster
+	 * @param m the message to send
+	 */
 	public void sendMessage(ClusterMessage m) {
 		this.comm.send(m);
 	}
 
+	/**
+	 * Process a healthcheck response message
+	 * @param m the response
+	 */
 	private void receivedHealthCheckReply(ClusterMessage m) {
 		if (m.getData().equals(this.healthcheckMap) && !this.healthcheckReplies.contains(m.getSenderIdentifier())) {
 			this.healthcheckReplies.add(m.getSenderIdentifier());
 		}
 	}
 
+	/**
+	 * Reads a script from disk and returns it as String
+	 * @param file The script to read
+	 * @return The resulting string
+	 */
 	public static String getScript(String file) {
 		String result = "";
 		try {
@@ -465,14 +565,24 @@ public class Scheduler implements IMessageHandler {
 			br.close();
 		}
 		catch (Exception e) {
-			log.error("Could not read start_worker.sh script", e);
+			log.error("Could not read {} script",file, e);
 		}
 		return result;
 	}
 
-	public static void startNode(String privateIp, String instanceId, Properties settings) throws JSchException {
+	/**
+	 * Actually start the node with the software of a worker
+	 * @param privateIp the private IP addres to listen on
+	 * @param instanceId The instance ID as specified by AWS
+	 * @param settings The properties to initialize with
+	 * @throws JSchException In case we cannot connect
+	 */
+	private static void startNode(String privateIp, String instanceId, Properties settings) throws JSchException {
 		for (int i = 0; i < 20; i++) {
 			try {
+				/*
+				 * Connect by SSH (private key) as the ubuntu user without StrictHostKeyChecking
+				 */
 				JSch ssh = new JSch();
 				ssh.addIdentity("scheduler.priv");
 
@@ -481,6 +591,9 @@ public class Scheduler implements IMessageHandler {
 				config.put("StrictHostKeyChecking", "no");
 				sshSession.setConfig(config);
 
+				/*
+				 * Get the `run_worker.sh` script, add the "secret" values and execute it remotely
+				 */
 				sshSession.connect();
 				ChannelExec channel = (ChannelExec) sshSession.openChannel("exec");
 
@@ -496,13 +609,15 @@ public class Scheduler implements IMessageHandler {
 				log.info("Executing the commands on the new node");
 				channel.connect();
 
+				/*
+				 * Wait for the command to finish executing
+				 */
 				while (true) {
 					if (channel.isClosed()) {
 						log.info("New node start had exit code: {}", channel.getExitStatus());
 						break;
 					}
 					try {
-
 						Thread.sleep(1000);
 					}
 					catch (Exception ee) {
@@ -510,13 +625,14 @@ public class Scheduler implements IMessageHandler {
 				}
 				channel.disconnect();
 				sshSession.disconnect();
-				// Give everything a minute to launch
-				log.info("Give the node a few seconds to come online");
-				Thread.sleep(45000);
+
+				log.info("Give the node two minutes to come online");
+				Thread.sleep(120000);
 				log.info("Node should be online!");
 				return;
 			}
 			catch (Exception e) {
+				// This may happen in case we try to connect before the node is ready. Not a big deal
 				log.warn("We hit an exception, but we will retry in a few seconds");
 			}
 			try {
@@ -524,32 +640,24 @@ public class Scheduler implements IMessageHandler {
 				// seconds to become accessible by SSH
 				Thread.sleep(6000);
 			}
-			catch (Exception e2) {
-				e2.printStackTrace();
+			catch (Exception e) {
+				e.printStackTrace();
 			}
 		}
 	}
 
-
-	public static void main(String[] args) throws JSchException {
+	/**
+	 * This is just how we start the thing
+	 * @param args _unused_
+	 */
+	public static void main(String[] args) {
 		Main main = new Main();
 		final Scheduler scheduler = new Scheduler(main.getCredentials(), main.getProperties());
-		//				List<Node> nodes = scheduler.getNodes();
-		//				try {
-		//					nodes.add(new Node(InetAddress.getByName("172.31.32.142"), "i-56dee115"));
-		//				}
-		//				catch (UnknownHostException e) {
-		//					e.printStackTrace();
-		//				}
-		//				scheduler.provisionNewNode();
-		//
-						Runtime.getRuntime().addShutdownHook(new Thread() {
-							public void run() {
-								scheduler.stop();
-							}
-						});
-		//				System.out.println(installWorkerScript());
-		//		Scheduler.startNode("54.72.149.99", "i-8d5f66ce", main.getProperties());
+		Runtime.getRuntime().addShutdownHook(new Thread() {
+			public void run() {
+				scheduler.stop();
+			}
+		});
 	}
 
 }

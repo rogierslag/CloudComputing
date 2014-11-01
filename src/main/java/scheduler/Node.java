@@ -20,18 +20,20 @@ public class Node {
 
 	private InetAddress ip;
 	private Queue<Task> assignedTasks;
-	private DateTime idle_since;
 	private String instanceId;
 
 	public Node(InetAddress ip, String instanceId) {
 		this.ip = ip;
 		this.instanceId = instanceId;
 		this.assignedTasks = new LinkedList<Task>();
-		this.idle_since = DateTime.now();
 	}
 
 	public boolean isIdle() {
 		return this.assignedTasks.isEmpty();
+	}
+
+	public String toString() {
+		return instanceId;
 	}
 
 }

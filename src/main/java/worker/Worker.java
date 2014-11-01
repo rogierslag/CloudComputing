@@ -1,21 +1,14 @@
 package worker;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
-import com.amazonaws.services.s3.AmazonS3Client;
-import com.amazonaws.services.s3.model.S3Object;
+import com.amazonaws.services.s3.transfer.Download;
+import com.amazonaws.services.s3.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.Upload;
 import communication.ClusterMessage;
 import communication.Communicator;
 import communication.IMessageHandler;
@@ -34,6 +27,9 @@ public class Worker implements IMessageHandler {
 	private final Communicator comm;
 	private String instanceId;
 
+	/**
+	 * Loads the properties files, sets its identifier and starts participating in the cluster
+	 */
 	public Worker() {
 		try {
 			Properties p = new Properties();
@@ -44,80 +40,108 @@ public class Worker implements IMessageHandler {
 			log.error("Could not read property file");
 			System.exit(1);
 		}
-		log.info("Using an identifier of {}",instanceId);
+		log.info("Using an identifier of {}", instanceId);
 		comm = new Communicator(this, Communicator.type.WORKER, instanceId);
 
 	}
 
+	/**
+	 * Sends a message to the entire cluster
+	 *
+	 * @param m the message to send
+	 */
 	public void sendMessage(ClusterMessage m) {
 		this.comm.send(m);
 	}
 
+	/**
+	 * Handle incoming messages
+	 *
+	 * Since I'm a worker, I only listen to assignments
+	 * @param m
+	 */
 	public void handleMessage(ClusterMessage m) {
-		if (m.getReceiverType()== Communicator.type.WORKER && m.getReceiverIdentifier().equals(instanceId)) {
-			// Meant for me!
-			if ( m.getMessageType().equals("assignment")) {
-				log.info("I'm going to work on {}",m.getData().get("inputFile"));
-				workOn((String)m.getData().get("inputFile"),(String)m.getData().get("outputFile"));
-			}
+		if (m.getMessageType().equals("assignment")) {
+			log.info("I'm going to work on {}", m.getData().get("inputFile"));
+			workOn((String) m.getData().get("inputFile"), (String) m.getData().get("outputFile"));
 		}
 	}
 
+	/**
+	 * Start working on some assignment.
+	 *
+	 * The actual work is done in a separate thread
+	 * @param inputFile the S3 input file
+	 * @param outputFile the S3 output file
+	 */
 	private void workOn(final String inputFile, final String outputFile) {
 		Runnable task = new Runnable() {
 			public void run() {
 				Main main = new Main();
-				AmazonS3Client s3Client = new AmazonS3Client(main.getCredentials());
 
-				log.info("Copying the file to myself");
-				S3Object rawInput = s3Client.getObject(main.getProperties().getProperty("aws.s3.input"),inputFile);
-				InputStream reader = new BufferedInputStream(
-						rawInput.getObjectContent());
-				File file = new File("/tmp/currentInputFile");
+				// This is a better and faster way to copy to S3 (otherwise timeouts)
+				TransferManager tx = new TransferManager(main.getCredentials());
+
 				try {
-					OutputStream writer = new BufferedOutputStream(new FileOutputStream(file));
-					int read = -1;
-
-					while ((read = reader.read()) != -1) {
-						writer.write(read);
-					}
-
-					writer.flush();
-					writer.close();
-					reader.close();
+					log.info("Copying the file to myself");
+					File file = new File("/tmp/currentInputFile");
+					Download dl = tx.download(main.getProperties().getProperty("aws.s3.input"), inputFile,
+							file);
+					dl.waitForCompletion();
 
 					log.info("Got the file locally now!");
 
 					log.info("Started conversion");
-					EncodingTask et = new EncodingTask("/tmp/currentInputFile","/tmp/currentOutputFile.mp4");
+					EncodingTask et = new EncodingTask("/tmp/currentInputFile", "/tmp/currentOutputFile.mp4");
 					Result r = et.executeTask();
-					log.info("Result was {}",r.type);
-					if ( r.type == ResultType.Success) {
-						s3Client.putObject(main.getProperties().getProperty("aws.s3.output"),outputFile,new File("/tmp/currentOutputFile.mp4"));
+					log.info("Result was {}", r.type);
+					if (r.type == ResultType.Success) {
+						Upload ul = tx.upload(main.getProperties().getProperty("aws.s3.output"), inputFile,
+								new File("/tmp/currentOutputFile.mp4"));
+						ul.waitForCompletion();
+
 						// Communicate back, delete from from input bucket
+						log.info("conversion was done and file waz sent back to S3");
+						tx.shutdownNow();
+						// s3Client.deleteObject(main.getProperties().getProperty("aws.s3.input"),inputFile);
+
+						ClusterMessage m = new ClusterMessage();
+						m.setReceiverIdentifier("scheduler");
+						m.setReceiverType(Communicator.type.SCHEDULER);
+						m.setMessageType("assignment-done");
+						Map<String, Object> map = new HashMap<String, Object>();
+						map.put("inputFile", inputFile);
+						map.put("outputFile", outputFile);
+						m.setData(map);
+						sendMessage(m);
+						return;
 					}
-					log.info("conversion was done and file wsa sent back to S3, unless you saw a stack trace");
-					// s3Client.deleteObject(main.getProperties().getProperty("aws.s3.input"),inputFile);
-
-					ClusterMessage m = new ClusterMessage();
-					m.setReceiverIdentifier("scheduler");
-					m.setReceiverType(Communicator.type.SCHEDULER);
-					m.setMessageType("assignment-done");
-					Map<String,Object> map = new HashMap<String,Object>();
-					map.put("inputFile",inputFile);
-					map.put("outputFile",outputFile);
-					m.setData(map);
-					sendMessage(m);
-				} catch ( Exception e) {
-					log.error("Something went terribly wrong",e);
 				}
+				catch (Exception e) {
+					log.error("Something went terribly wrong", e);
+				}
+				tx.shutdownNow();
 
+				// We only get here if we did not have any success
+				ClusterMessage m = new ClusterMessage();
+				m.setReceiverIdentifier("scheduler");
+				m.setReceiverType(Communicator.type.SCHEDULER);
+				m.setMessageType("assignment-failed");
+				Map<String, Object> map = new HashMap<String, Object>();
+				map.put("inputFile", inputFile);
+				map.put("outputFile", outputFile);
+				m.setData(map);
+				sendMessage(m);
 			}
 		};
 		// Should be done in a separate thread since it otherwise will block the messaging thread
 		new Thread(task).start();
 	}
 
+	/**
+	 * Start the thing
+	 * @param args _unused_
+	 */
 	public static void main(String[] args) {
 		new Worker();
 	}

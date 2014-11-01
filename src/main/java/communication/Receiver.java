@@ -14,14 +14,28 @@ class Receiver extends ReceiverAdapter {
 	private final Communicator.type type;
 	private String me;
 
+	/**
+	 * Initialize a message receiver
+	 * @param handler the IMessageHandler to handle received messages
+	 * @param type The type of communicator
+	 * @param identifier the identifier (scheduler of instance ID)
+	 */
 	public Receiver(IMessageHandler handler, Communicator.type type, String identifier) {
 		this.handler = handler;
 		this.type = type;
 		this.me = identifier;
 	}
 
+	/**
+	 * Receives a message and possibly relays it
+	 *
+	 * - Reply to healthcheck
+	 * - Discard messages send by itself
+	 * - Forwards messages meant for itself to IMessageHandler
+	 * - Discards remaining
+	 * @param msg the received message
+	 */
 	public void receive(final Message msg) {
-//		log.info("received msg from " + msg.getSrc() + ": " + msg.getObject());
 		final ClusterMessage message = (ClusterMessage) msg.getObject();
 
 		// Healthchecks
@@ -48,7 +62,6 @@ class Receiver extends ReceiverAdapter {
 
 		// Ignore messages send by me
 		if (message.getSenderType() == this.type && this.me.equals(message.getSenderIdentifier())) {
-//			log.info("I send this message myself");
 			return;
 		}
 
@@ -57,7 +70,5 @@ class Receiver extends ReceiverAdapter {
 			this.handler.handleMessage(message);
 			return;
 		}
-
-		log.error("A ClusterMessage was not processed by a receiver: {}", message);
 	}
 }
