@@ -17,7 +17,9 @@ public class Communicator {
 
 	public enum type {
 		SCHEDULER,
-		WORKER
+		WORKER,
+		HEALTH_CHECK,
+		PROVISIONER
 	}
 
 	private Communicator.type myType;
@@ -25,27 +27,29 @@ public class Communicator {
 
 	/**
 	 * Initialize a scheduler communicator
+	 *
 	 * @param handler the IMessageHandler to handle incoming messages
 	 */
 	public Communicator(IMessageHandler handler) {
-		this(handler, type.SCHEDULER,"scheduler");
+		this(handler, type.SCHEDULER, "scheduler");
 	}
 
 	/**
 	 * Initialize a worker communicator
-	 * @param handler the IMessageHandler to handle incoming messages
-	 * @param type The type (usually WORKER)
+	 *
+	 * @param handler    the IMessageHandler to handle incoming messages
+	 * @param type       The type (usually WORKER)
 	 * @param identifier the identifier (AWS EC2 Instance ID)
 	 */
 	public Communicator(IMessageHandler handler, type type, String identifier) {
-		if ( identifier == null ) {
+		if (identifier == null) {
 			throw new InvalidParameterException();
 		}
 		myIdentifier = identifier;
 		myType = type;
 		try {
 			channel = new JChannel(new File("jgroups_discovery.xml"));
-			channel.setReceiver(new Receiver(handler,type,identifier));
+			channel.setReceiver(new Receiver(handler, type, identifier));
 			channel.connect("CloudComputing");
 
 			Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -61,8 +65,8 @@ public class Communicator {
 
 	/**
 	 * Send a message to the cluster
-	 *
 	 * The method sets the Sender* itself
+	 *
 	 * @param m the message to send
 	 */
 	public void send(ClusterMessage m) {

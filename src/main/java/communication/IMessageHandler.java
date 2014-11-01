@@ -6,6 +6,7 @@ package communication;
 public interface IMessageHandler {
 
 	public void handleMessage(ClusterMessage m);
+
 	public void sendMessage(ClusterMessage m);
 
 }

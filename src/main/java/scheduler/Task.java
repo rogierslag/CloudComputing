@@ -2,7 +2,6 @@ package scheduler;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.ToString;
 import org.joda.time.DateTime;
 
 /**
@@ -39,7 +38,7 @@ public class Task {
 	}
 
 	public String toString() {
-		return String.format("[%s] %s %s",status,inputFile,outputFile);
+		return String.format("[%s] %s %s", status, inputFile, outputFile);
 	}
 
 }
