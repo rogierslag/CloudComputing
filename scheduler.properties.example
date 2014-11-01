@@ -17,8 +17,10 @@ cluster_health.max_missed_checks = 3
 cluster_health.interval = 5
 cluster_health.chaos_probability = 1
 cluster_health.chaos_interval = 60
+cluster_health.min_nodes = 5
 
 provision.check_load_interval = 15
+provision.max_nodes = 100
 
 workgenerator.chance_old_task = 0.1
 workgenerator.timeout_min_ms = 3000

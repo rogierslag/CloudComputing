@@ -37,20 +37,25 @@ public class Provisioner {
 	private final List<Task> taskQueue;
 	private final int maxWaitingTime;
 	private final int maxTasksNodesRatio;
+	private final Scheduler parent;
 
 	private boolean isDestroying = false;
 	private boolean isCreating = false;
+	private int maxNodes;
 
 
-	public Provisioner(ScheduledExecutorService executorService, List<Node> nodes, List<Task> taskQueue,
+	public Provisioner(Scheduler parent, ScheduledExecutorService executorService, List<Node> nodes,
+			List<Task> taskQueue,
 			AWSCredentials awsCredentials,
 			Properties properties) {
+		this.parent = parent;
 		this.nodes = nodes;
 		this.properties = properties;
 		this.taskQueue = taskQueue;
 
 		this.maxWaitingTime = Integer.parseInt(properties.getProperty("scheduler.max_waiting_time", "600"));
 		this.maxTasksNodesRatio = Integer.parseInt(properties.getProperty("scheduler.max_ratio", "3"));
+		this.maxNodes = Integer.parseInt(properties.getProperty("provision.max_nodes", "2"));
 
 		ec2Client = new AmazonEC2Client(awsCredentials);
 		ec2Client.setEndpoint("ec2.eu-west-1.amazonaws.com");
@@ -71,7 +76,7 @@ public class Provisioner {
 			@Override
 			public void run() {
 				log.info("Going to check how busy we are");
-				List<Task> waitingTasks = waitingTasks();
+				List<Task> waitingTasks = parent.waitingTasks();
 
 				log.info("We have exactly {} waiting tasks", waitingTasks.size());
 				if (waitingTasks.size() > 0 && nodes.isEmpty()) {
@@ -92,13 +97,14 @@ public class Provisioner {
 						destroyExistingNode(toRemove);
 					}
 				}
-				else if (waitingTasks.size() > 0 &&
+				else if (!isCreating && nodes.size() < maxNodes && waitingTasks.size() > 0 &&
 						waitingTasks.get(0).getCreated_at().isBefore(new DateTime().minusSeconds(maxWaitingTime))) {
 					log.info("A task was waiting for more than {} seconds, which is long, so we need a new node",
 							maxWaitingTime);
 					provisionNewNode();
 				}
-				else if (waitingTasks.size() > maxTasksNodesRatio * nodes.size()) {
+				else if (!isCreating && nodes.size() < maxNodes
+						&& waitingTasks.size() > maxTasksNodesRatio * nodes.size()) {
 					log.info("There are currently {} times more tasks than nodes, so we should add capacity",
 							maxTasksNodesRatio);
 					provisionNewNode();
@@ -108,16 +114,6 @@ public class Provisioner {
 				}
 			}
 		};
-	}
-
-	private List<Task> waitingTasks() {
-		List<Task> waitingTasks = new ArrayList<Task>();
-		for (Task t : taskQueue) {
-			if (t.getStatus() == Task.Status.QUEUED) {
-				waitingTasks.add(t);
-			}
-		}
-		return waitingTasks;
 	}
 
 	/**
@@ -147,6 +143,10 @@ public class Provisioner {
 			return;
 		}
 
+		for (Task t : remove.getAssignedTasks()) {
+			t.setStatus(Task.Status.QUEUED);
+			t.setAssignedNode(null);
+		}
 		log.info("Node {} is about to be removed", remove);
 		nodes.remove(remove);
 		List<String> list = new ArrayList<String>(1);
@@ -219,25 +219,9 @@ public class Provisioner {
 		 * production
 		 */
 		try {
+
 			log.info("Starting the software on the new node");
-			startNode(privateIp, instanceId, properties);
-
-			Node node = new Node(InetAddress.getByName(privateIp), instanceId);
-			nodes.add(node);
-			log.info("Provisioned new node '{}'", node);
-			log.info("Now we have the following nodes: {}", nodes);
-		}
-		catch (UnknownHostException e) {
-			// Wait whut
-			// When shit hits the fan, just cancel the thing
-			// This one triggers if Amazon gives us a non-existing IP
-			// Or if we did not get a final IP in 120 seconds
-			log.error("Something went wrong when getting a new node, destroying instanceId {}", instanceId);
-			List<String> list = new ArrayList<String>(1);
-			list.add(instanceId);
-
-			TerminateInstancesRequest terminateRequest = new TerminateInstancesRequest(list);
-			ec2Client.terminateInstances(terminateRequest);
+			new Thread(startNode(privateIp, instanceId, properties)).start();
 		}
 		catch (JSchException e) {
 			// Wait whut
@@ -250,9 +234,6 @@ public class Provisioner {
 			TerminateInstancesRequest terminateRequest = new TerminateInstancesRequest(list);
 			ec2Client.terminateInstances(terminateRequest);
 		}
-
-		// Other may start to create nodes again
-		isCreating = false;
 	}
 
 	/**
@@ -286,72 +267,110 @@ public class Provisioner {
 	 * @param settings   The properties to initialize with
 	 * @throws JSchException In case we cannot connect
 	 */
-	private static void startNode(String privateIp, String instanceId, Properties settings) throws JSchException {
-		for (int i = 0; i < 20; i++) {
-			try {
+	private Runnable startNode(final String privateIp, final String instanceId,
+			final Properties settings) throws JSchException {
+		return new Runnable() {
+			public void run() {
+				for (int i = 0; i < 20; i++) {
+					try {
 				/*
 				 * Connect by SSH (private key) as the ubuntu user without StrictHostKeyChecking
 				 */
-				JSch ssh = new JSch();
-				ssh.addIdentity("scheduler.priv");
+						JSch ssh = new JSch();
+						ssh.addIdentity("scheduler.priv");
 
-				Session sshSession = ssh.getSession("ubuntu", privateIp, 22);
-				java.util.Properties config = new java.util.Properties();
-				config.put("StrictHostKeyChecking", "no");
-				sshSession.setConfig(config);
+						Session sshSession = ssh.getSession("ubuntu", privateIp, 22);
+						java.util.Properties config = new java.util.Properties();
+						config.put("StrictHostKeyChecking", "no");
+						sshSession.setConfig(config);
 
 				/*
 				 * Get the `run_worker.sh` script, add the "secret" values and execute it remotely
 				 */
-				sshSession.connect();
-				ChannelExec channel = (ChannelExec) sshSession.openChannel("exec");
+						sshSession.connect();
+						ChannelExec channel = (ChannelExec) sshSession.openChannel("exec");
 
-				channel.setInputStream(null);
-				channel.setCommand(
-						getScript("run_worker.sh")
-								.replace("((access_key))", settings.getProperty("aws.s3.access_key"))
-								.replace("((secret_key))", settings.getProperty("aws.s3.secret_key"))
-								.replace("((private_ip))", privateIp)
-								.replace("((instance_id))", instanceId)
-				);
+						channel.setInputStream(null);
+						channel.setCommand(
+								getScript("run_worker.sh")
+										.replace("((access_key))", settings.getProperty("aws.s3.access_key"))
+										.replace("((secret_key))", settings.getProperty("aws.s3.secret_key"))
+										.replace("((private_ip))", privateIp)
+										.replace("((instance_id))", instanceId)
+						);
 
-				log.info("Executing the commands on the new node");
-				channel.connect();
+						log.info("Executing the commands on the new node");
+						channel.connect();
 
 				/*
 				 * Wait for the command to finish executing
 				 */
-				while (true) {
-					if (channel.isClosed()) {
-						log.info("New node start had exit code: {}", channel.getExitStatus());
-						break;
+						while (true) {
+							if (channel.isClosed()) {
+								log.info("New node start had exit code: {}", channel.getExitStatus());
+								break;
+							}
+							try {
+								Thread.sleep(1000);
+							}
+							catch (Exception ee) {
+							}
+						}
+						channel.disconnect();
+						sshSession.disconnect();
+
+						log.info("Give the node five minutes to come online");
+						for (int j = 0; j < 30; j++) {
+							if (parent.getClusterHealth().isAlive(instanceId)) {
+								log.info("We heard from the healthcheck this node is online, so lets stop waiting");
+								break;
+							}
+							try {
+								Thread.sleep(10000);
+							}
+							catch (InterruptedException e) {
+							}
+						}
+						try {
+							Node node = new Node(InetAddress.getByName(privateIp), instanceId);
+							nodes.add(node);
+
+							// Other may start to create nodes again
+							isCreating = false;
+
+							log.info("Provisioned new node '{}'", node);
+							log.info("Now we have the following nodes: {}", nodes);
+							log.info("Node should be online!");
+							return;
+						}
+						catch (UnknownHostException e) {
+							// Wait whut
+							// When shit hits the fan, just cancel the thing
+							// This one triggers if Amazon gives us a non-existing IP
+							// Or if we did not get a final IP in 120 seconds
+							log.error("Something went wrong when getting a new node, destroying instanceId {}",
+									instanceId);
+							List<String> list = new ArrayList<String>(1);
+							list.add(instanceId);
+
+							TerminateInstancesRequest terminateRequest = new TerminateInstancesRequest(list);
+							ec2Client.terminateInstances(terminateRequest);
+						}
+					}
+					catch (Exception e) {
+						// This may happen in case we try to connect before the node is ready. Not a big deal
+						log.warn("We hit an exception, but we will retry in a few seconds");
 					}
 					try {
-						Thread.sleep(1000);
+						// Sleep 6 seconds. With a total of 20 runs this gives AWS 120
+						// seconds to become accessible by SSH
+						Thread.sleep(6000);
 					}
-					catch (Exception ee) {
+					catch (Exception e) {
+						e.printStackTrace();
 					}
 				}
-				channel.disconnect();
-				sshSession.disconnect();
-
-				log.info("Give the node two minutes to come online");
-				Thread.sleep(120000);
-				log.info("Node should be online!");
-				return;
 			}
-			catch (Exception e) {
-				// This may happen in case we try to connect before the node is ready. Not a big deal
-				log.warn("We hit an exception, but we will retry in a few seconds");
-			}
-			try {
-				// Sleep 6 seconds. With a total of 20 runs this gives AWS 120
-				// seconds to become accessible by SSH
-				Thread.sleep(6000);
-			}
-			catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
+		};
 	}
 }

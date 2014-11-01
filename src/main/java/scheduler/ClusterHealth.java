@@ -30,6 +30,7 @@ public class ClusterHealth implements IMessageHandler {
 	private HashMap<String, Object> healthcheckMap;
 	private HashMap<String, Integer> missedHealthchecks = new HashMap<String, Integer>();
 	private int maxMissedHealthchecks;
+	private int ChaosMinimumNodes;
 
 	public ClusterHealth(Scheduler parent, ScheduledExecutorService executorService, List<Node> nodes,
 			Properties properties) {
@@ -38,6 +39,7 @@ public class ClusterHealth implements IMessageHandler {
 
 		this.maxMissedHealthchecks = Integer.parseInt(properties.getProperty("cluster_health.max_missed_checks", "5"));
 		this.chaosProbability = Integer.parseInt(properties.getProperty("cluster_health.chaos_probability", "0"));
+		this.ChaosMinimumNodes = Integer.parseInt(properties.getProperty("cluster_health.min_nodes", "5"));
 
 		this.communicator = new Communicator(this, Communicator.type.HEALTH_CHECK, "healthcheck");
 		executorService.scheduleWithFixedDelay(checkForClusterLiveness(), 5, Integer.parseInt(
@@ -46,13 +48,17 @@ public class ClusterHealth implements IMessageHandler {
 				properties.getProperty("cluster_health.chaos_interval", "60")), TimeUnit.SECONDS);
 	}
 
+	/**
+	 * This is the ChaosMonkey which may knock instances down in order to test resilience against failures
+	 * @return the runnable which may or may not take stuff down
+	 */
 	private Runnable causeChaos() {
 		return new Runnable() {
 			public void run() {
 				// Determine whether we should actually do something now
 
 				Random r = new Random();
-				if (r.nextInt(100) < chaosProbability) {
+				if (r.nextInt(100) < chaosProbability && nodes.size() >= ChaosMinimumNodes) {
 					log.warn("Here comes chaos!");
 					synchronized (nodes) {
 						int elementNumber = r.nextInt(nodes.size());
@@ -120,6 +126,11 @@ public class ClusterHealth implements IMessageHandler {
 		};
 	}
 
+	/**
+	 * Handle a node with a failed healthcheck and possibly add it to the list of termination nodes
+	 * @param toTerminate List of nodes to be terminated
+	 * @param n Node which missed the healthcheck
+	 */
 	private void nodeMissedHealthcheck(List<Node> toTerminate, Node n) {
 		if (missedHealthchecks.containsKey(n.getInstanceId())) {
 			int missedCount = missedHealthchecks.get(n.getInstanceId()) + 1;
@@ -154,6 +165,15 @@ public class ClusterHealth implements IMessageHandler {
 	@Override
 	public void sendMessage(ClusterMessage m) {
 		this.communicator.send(m);
+	}
+
+	/**
+	 * Check if a certain instance is online
+	 * @param instanceId the instance ID of the instance
+	 * @return whether or not the instance is online
+	 */
+	public boolean isAlive(String instanceId) {
+		return healthcheckReplies.contains(instanceId);
 	}
 
 	/**

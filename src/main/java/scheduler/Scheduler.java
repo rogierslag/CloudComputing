@@ -31,6 +31,9 @@ public class Scheduler implements IMessageHandler {
 
 	private final Properties properties;
 
+	@Getter
+	private final ClusterHealth clusterHealth;
+
 	private ScheduledExecutorService executorService = Executors.newScheduledThreadPool(4);
 
 	private final AmazonS3Client s3Client;
@@ -55,8 +58,8 @@ public class Scheduler implements IMessageHandler {
 		s3Client = new AmazonS3Client(awsCredentials);
 
 		comm = new Communicator(this);
-		provisioner = new Provisioner(executorService, nodes, taskQueue, awsCredentials, properties);
-		new ClusterHealth(this, executorService, nodes, properties);
+		provisioner = new Provisioner(this,executorService, nodes, taskQueue, awsCredentials, properties);
+		clusterHealth =new ClusterHealth(this, executorService, nodes, properties);
 
 		// Every task will start another one in succession. This ensures in case
 		// of a high load not all tasks are
@@ -65,6 +68,7 @@ public class Scheduler implements IMessageHandler {
 				Integer.parseInt(properties.getProperty("aws.s3.check_interval", "10")), TimeUnit.SECONDS);
 		executorService.scheduleWithFixedDelay(this.assignTaskToNode(), 5,
 				Integer.parseInt(properties.getProperty("scheduler.assign_interval", "10")), TimeUnit.SECONDS);
+		executorService.scheduleAtFixedRate(new Runnable() {public void run() { log.info(waitingTasks().toString()); } },10,30,TimeUnit.SECONDS);
 	}
 
 	/**
@@ -145,6 +149,20 @@ public class Scheduler implements IMessageHandler {
 				log.info("Assigned task {} to {}", assignTask, assignTo);
 			}
 		};
+	}
+
+	/**
+	 * Get the list of waiting tasks
+	 * @return list of waiting tasks
+	 */
+	protected List<Task> waitingTasks() {
+		List<Task> waitingTasks = new ArrayList<Task>();
+		for (Task t : taskQueue) {
+			if (t.getStatus() == Task.Status.QUEUED) {
+				waitingTasks.add(t);
+			}
+		}
+		return waitingTasks;
 	}
 
 	/**

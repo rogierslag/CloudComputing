@@ -27,6 +27,11 @@ public class EncodingTask implements ITask {
 		this.outputFile = outputFile;
 	}
 
+	/**
+	 * Creates a runnable which can be fed into a Thread
+	 * @param comm The communicator for reporting the status
+	 * @return Thread input
+	 */
 	public Runnable createWorkTask(final Communicator comm) {
 		return new Runnable() {
 			public void run() {
@@ -92,6 +97,10 @@ public class EncodingTask implements ITask {
 		};
 	}
 
+	/**
+	 * Executes the conversion task
+	 * @return Well you should be able to figure that out from the Enum
+	 */
 	private Result executeTask() {
 		ProcessBuilder pb = new ProcessBuilder("ffmpeg", "-y", "-i", inputFile, outputFile);
 		pb.redirectError(new File("/tmp/error.log"));
