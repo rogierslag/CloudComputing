@@ -1,8 +1,6 @@
 package communication;
 
 import lombok.extern.slf4j.Slf4j;
-import org.jgroups.Message;
-import org.jgroups.ReceiverAdapter;
 
 /**
  * Created by Rogier on 31-10-14.
@@ -16,10 +14,13 @@ class Receiver extends ReceiverAdapter {
 
 	/**
 	 * Initialize a message receiver
-	 *
-	 * @param handler    the IMessageHandler to handle received messages
-	 * @param type       The type of communicator
-	 * @param identifier the identifier (scheduler of instance ID)
+	 * 
+	 * @param handler
+	 *            the IMessageHandler to handle received messages
+	 * @param type
+	 *            The type of communicator
+	 * @param identifier
+	 *            the identifier (scheduler of instance ID)
 	 */
 	public Receiver(IMessageHandler handler, Communicator.type type, String identifier) {
 		this.handler = handler;
@@ -28,11 +29,12 @@ class Receiver extends ReceiverAdapter {
 	}
 
 	/**
-	 * Receives a message and possibly relays it
-	 * - Reply to healthcheck - Discard messages send by itself - Forwards messages meant for itself to IMessageHandler
-	 * - Discards remaining
-	 *
-	 * @param msg the received message
+	 * Receives a message and possibly relays it - Reply to healthcheck -
+	 * Discard messages send by itself - Forwards messages meant for itself to
+	 * IMessageHandler - Discards remaining
+	 * 
+	 * @param msg
+	 *            the received message
 	 */
 	public void receive(final Message msg) {
 		final ClusterMessage message = (ClusterMessage) msg.getObject();
@@ -48,7 +50,7 @@ class Receiver extends ReceiverAdapter {
 					response.setReceiverType(message.getSenderType());
 					response.setData(message.getData());
 					handler.sendMessage(response);
-					//					log.info("healthcheck response: {}",response);
+					log.trace("healthcheck response: {}", response);
 				}
 			};
 			new Thread(reply).start();

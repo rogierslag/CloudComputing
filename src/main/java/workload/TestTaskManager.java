@@ -74,7 +74,7 @@ public class TestTaskManager {
 		if (!folder.exists()) {
 			throw new IOException("Directory with test videos is missing.");
 		}
-		log.info("reading all videos to be used for workload generation.");
+		log.trace("reading all videos to be used for workload generation.");
 		List<String> files = new ArrayList<String>();
 		for (final File fileEntry : folder.listFiles()) {
 			if (!fileEntry.isDirectory()) {
