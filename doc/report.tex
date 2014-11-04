@@ -55,14 +55,28 @@
 
 \section{Experimental Results}
 %Recommended size 1.5 pages
+In this section we will describe the experimental setup and the experiments themselves.
+Observations and experiments are also included in this section.
 
 \subsection{Experimental setup}
 %Describe working environments
+The system was developed for Amazon AWS and was tested on that platform.
+Amazon AWS provides different types of instances and we used \emph{t2.micro} instances.
+Our workload is mostly CPU intensive.
+These are the smallest instances provided and we could achieve higher performance on larger instances,
+ but they were chosen because they are Free Tier eligible.
+Amazon describes these instances as CPU's operating at 2.5GHz and having 1 GB of memory.
 
 %Describe general workload
+We created a workload generator that generates an artificial workload.
+The workload generator creates a new task at a regular interval and offers this task to the system using the input bucket.
+The task can either be a completely new task or with a certain chance be a task already offered to the system before.
+The tasks consist of encoding a movie from one format to another format.
 
 %Describe monitoring tools and libraries
-
+To monitor the system we used \emph{The Simple Logging Facade for Java} (SLF4J) in combination with \emph{Log4J}.
+SLF4J provides a facade for Log4J to allow other logging backends to be configured at runtime.
+We used simple logging output to measure the performance and other statistics of the system.
 %other tools
 
 \subsection{Experiments}
