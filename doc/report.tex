@@ -1,6 +1,7 @@
 \documentclass[a4paper]{IEEEtran}
 
 \usepackage[numbers,square,comma]{natbib}
+\usepackage{hyperref}
 
 \title{Cloud Computing: \\ Report}
 \author{Steffan Norberhuis\\ 1509306 \and
@@ -32,7 +33,7 @@ Using the \textit{cloud} for these purposes would have several advantages:
 
 \begin{enumerate}
 \item Pay for the number of machines needed at the time.
-\item Flexibility of number of workers (scale up and down quickly)
+\item Flexibility of number of worker nodes (scale up and down quickly)
 \item Economy of scale of the IAAS for the administrators and hardware.
 \item Lower up-front costs
 \item No more on-site hardware and hardware failures
@@ -59,6 +60,8 @@ Section 4 will explore the design of the system and any policies involved.
 Section 5 will show the experimental setup and show and interpret the benchmarks which were run.
 In section 6 a discussion is done over the results.
 This then leads to a conclusion in section 7.
+
+Any source code discussed in this report and the report itself is available publicly on \href{https://github.com/snorberhuis/CloudComputing}{github}.
 
 \section{Background on Application}
 
