@@ -17,6 +17,7 @@ import main.Main;
 
 import org.joda.time.DateTime;
 
+import scheduler.Task.Status;
 import workload.WorkLoadGenerator;
 import amazon.Credentials;
 
@@ -114,15 +115,30 @@ public class Scheduler implements IMessageHandler {
 						tmp.setStatus(Task.Status.QUEUED);
 						// the assignment to a node is done by another method
 						taskQueue.add(tmp);
-						log.info("Added task to scheduler queue: {}", tmp);
+						log.trace("Added task to scheduler queue: {}", tmp);
 					} else {
 						// We have a precomputed one!
 						// So we should definitely do something here
 						// TODO
 					}
 				}
+				// log the current Task Queue for monitoring.
+				logTaskQueue();
 			}
+
 		};
+	}
+
+	private void logTaskQueue() {
+		DateTime currentTime = new DateTime();
+		DateTime longestDelay = currentTime;
+		for (Task task : taskQueue) {
+			if (task.getStatus() == Status.QUEUED && task.getCreated_at().isBefore(longestDelay)) {
+				longestDelay = task.getCreated_at();
+			}
+		}
+		log.info("Monitor: #task queued: {} , longest delay: {}s.", taskQueue.size(), (currentTime.getMillis() - longestDelay.getMillis()) / 1000);
+
 	}
 
 	/**

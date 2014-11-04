@@ -36,7 +36,7 @@ public class TestTaskManager {
 	 * @throws IOException
 	 */
 	public TestTask getNewTask() throws IOException {
-		String taskName = UUID.randomUUID().toString();
+		String taskName = UUID.randomUUID().toString() + ".avi";
 		previousTask.add(taskName);
 		return new TestTask(taskName, getRandomTestVideo());
 	}
