@@ -132,12 +132,13 @@ public class Scheduler implements IMessageHandler {
 	private void logTaskQueue() {
 		DateTime currentTime = new DateTime();
 		DateTime longestDelay = currentTime;
-		for (Task task : taskQueue) {
+		List<Task> queuedTasks = waitingTasks();
+		for (Task task : queuedTasks) {
 			if (task.getStatus() == Status.QUEUED && task.getCreated_at().isBefore(longestDelay)) {
 				longestDelay = task.getCreated_at();
 			}
 		}
-		log.info("Monitor: #task queued: {} , longest delay: {}s.", taskQueue.size(), (currentTime.getMillis() - longestDelay.getMillis()) / 1000);
+		log.info("Monitor: #task queued: {} , longest delay: {}s.", queuedTasks.size(), (currentTime.getMillis() - longestDelay.getMillis()) / 1000);
 
 	}
 
