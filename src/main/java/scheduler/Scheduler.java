@@ -245,7 +245,7 @@ public class Scheduler implements IMessageHandler {
 				break;
 			}
 		}
-		log.info("Monitor: done with task: {}", task);
+		log.info("Monitor: finished task.", task);
 		task.setStatus(status);
 	}
 
@@ -304,7 +304,7 @@ public class Scheduler implements IMessageHandler {
 		});
 
 		final WorkLoadGenerator wlg = new WorkLoadGenerator(main.getCredentials(), main.getProperties());
-		new Thread(wlg).start();
+		// new Thread(wlg).start();
 	}
 
 }
