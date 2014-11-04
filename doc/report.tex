@@ -55,40 +55,48 @@ The server (the master instance) consists of several components:
 \item
 The scheduler:
 this part of the application regularly checks for new files and add them to the queue.
-From this queue, it assign them to workers,
+The head of the queue is assigned to the next available worker.
 \item
 The Provisioner:
 this section has the responsibility to monitor the number of workers nodes, spawn new ones when thresholds are met, and handles the creation and termination of worker nodes.
 \item
 The health checker:
 which is responsible to ensure every node in the cluster is healthy, it requests checks from worker nodes at a regular interval.
-Once a worker node misses a certain number of checks, it is considered to be tainted and it terminated.
-Its jobs are re-added to the queue.
+Once a worker node misses a certain number of checks, it is considered to have failed and it terminates the node.
+The job of the failed worker node is re-added to the queue.
 \end{enumerate}
 
 All thresholds and settings are managed by a simple configuration file (`scheduler.properties`).
 The current system is based on Amazon as a provider, but this implementation can be easily changed to also support other providers such as Microsoft Azure.
 \\
 \\
-To simplicity the system has one job list, to which each job which enters the system is added.
-Each job keeps track of its status (either `QUEUED`, `STARTED`, `FINISHED`, or `FAILED`).
-Jobs are downloaded and uploaded from and to AWS S3 using the AWS SDK, which offers a TransferManager abstraction class to handle these IO operations to the workers nodes.
-Workers nodes are provisioned using the same SDK, and are started by executing a simple script through SSH.
+For simplicity the system has one job list, to which each new job is added.
+Each job keeps track of its status either `QUEUED`, `STARTED`, `FINISHED`, or `FAILED`.
+Jobs are downloaded from and uploaded to AWS S3 using the AWS SDK, which offers a TransferManager abstraction class to handle the IO operations to the workers nodes.
+Workers nodes are provisioned using the same SDK and are started by executing a simple script through SSH.
 A worker will then get its source directly from Github, build the Maven project and start running.
-By responding to the healthchecks, the provisioner is made aware the start proces has been completed and the node is added to the pool (after which the scheduler will start assigning nodes to it).
+By responding to the healthchecks, the provisioner is made aware that the start proces has been completed
+and the node is added to the pool. 
+The scheduler will now start assigning jobs to the node.
 If a node fails to come online within five minutes, a failure is assumed and the node is terminated again.
 \\
 \\
-By making the worker nodes contain as little logic as possible (they are considered to be ready for termination), each node is required to communicate with the master instance.
+The worker nodes contain as little logic as possible and this makes them to be ready for termination at any moment.
+Each node is required to communicate with the master instance.
 Messages are sent for each assignment (from master to worker), each status update (from worker to master) and for healthchecks (bidirectional).
 Since all information is gathered at the master instance, this is also the location where statistics regarding performance are stored.
 \\
 \\
-To improve reliability, the assumption was made a worker node may fail at any given point in time.
+To improve reliability, we assume that worker node can fail at any given point in time
+and have to be prepared for this.
 To adequately build the system to handle this, we have introduced Chaosmonkey.
-Chaosmonkey can be configured to run at a certain interval with a certain probability, in case it runs it will pick a worker node and destroy it.
-For this it communicates directly with Amazon, so neither the worker nor the master instance know what happened and should simply react to the results of the healthcheck.
-However, it will log this to the master instance log, such that an operator can easily see this was an intended failure.
+Chaosmonkey can be configured to run at a certain interval with a certain probability, in case it runs it will pick a worker node 
+and on purpose let this node fail.
+The Chaosmonkey communicates directly with Amazon, so neither the worker nor the master instance know what happened and should simply react to the results of the healthcheck.
+However, it will log to the master instance log its activity, such that an operator can easily see this was an intended failure.
+The Chaosmonkey makes failure a natural part of the system performance.
+This forces us to always deal with failure and let us test reliability.
+Chaosmonkey is an idea that was published and is used by Netflix in their production environment\cite{Netflix-cm}
 
 \subsection{System Policies}
 
@@ -97,8 +105,9 @@ The system always uses a elastic scaling policy. There are several parameters wh
 \begin{enumerate}
 \item A task should not be waiting for over a certain number of seconds.
 If that is the case, under-capacity is anticipated and new nodes are provisioned.
-\item The ratio between tasks and nodes should not exceed a set threshold. It that is the case, it is assumed that there is too little capacity, so a new node is provisioned.
-\item While a new node is being provisioned, no other provisioning will start
+\item The ratio between tasks and nodes should not exceed a set threshold. 
+If that is the case, it is assumed that there is too little capacity, so a new node is provisioned.
+\item While a new node is being provisioned, no other provisioning will start.
 \item A maximum number of nodes can be specified to avoid very high costs by a dDos similar attack.
 \end{enumerate}
 
