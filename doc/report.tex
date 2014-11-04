@@ -36,19 +36,82 @@
 %Recommended Size 1.5 pages
 
 \subsection{Resource Management Architecture}
-%Design
 
-%Inter operation provisioning
+The system is designed using a regular client-server model.
+Customers can upload their videos using the application.
+The application (not part of this implementation) uploads the video to an Amazon S3 bucket.
+This bucket is regularly scanned by the master instance, which generates job and places them into a queue.
+The master instance then assigns these jobs to machines, based on creation time.
+Once a job is done, the result is saved to another Amazon S3 bucket, where the file is available for downloads.
+\\
+This approach has multiple advantages.
+First of all, all information is durable and the data will be preserved (even in case all instances go down).
+Secondly one is able to take down the master instance (e.g. for a new deployment) without affecting the customers ability to upload new videos to the system.
+\\
+\\
+The server (the master instance) consists of several components:
 
-%Allocation
+\begin{enumerate}
+\item
+The scheduler:
+this part of the application regularly checks for new files and add them to the queue.
+From this queue, it assign them to workers,
+\item
+The Provisioner:
+this section has the responsibility to monitor the number of workers nodes, spawn new ones when thresholds are met, and handles the creation and termination of worker nodes.
+\item
+The health checker:
+which is responsible to ensure every node in the cluster is healthy, it requests checks from worker nodes at a regular interval.
+Once a worker node misses a certain number of checks, it is considered to be tainted and it terminated.
+Its jobs are re-added to the queue.
+\end{enumerate}
 
-%Reliability
-
-%Monitoring components
-
+All thresholds and settings are managed by a simple configuration file (`scheduler.properties`).
+The current system is based on Amazon as a provider, but this implementation can be easily changed to also support other providers such as Microsoft Azure.
+\\
+\\
+To simplicity the system has one job list, to which each job which enters the system is added.
+Each job keeps track of its status (either `QUEUED`, `STARTED`, `FINISHED`, or `FAILED`).
+Jobs are downloaded and uploaded from and to AWS S3 using the AWS SDK, which offers a TransferManager abstraction class to handle these IO operations to the workers nodes.
+Workers nodes are provisioned using the same SDK, and are started by executing a simple script through SSH.
+A worker will then get its source directly from Github, build the Maven project and start running.
+By responding to the healthchecks, the provisioner is made aware the start proces has been completed and the node is added to the pool (after which the scheduler will start assigning nodes to it).
+If a node fails to come online within five minutes, a failure is assumed and the node is terminated again.
+\\
+\\
+By making the worker nodes contain as little logic as possible (they are considered to be ready for termination), each node is required to communicate with the master instance.
+Messages are sent for each assignment (from master to worker), each status update (from worker to master) and for healthchecks (bidirectional).
+Since all information is gathered at the master instance, this is also the location where statistics regarding performance are stored.
+\\
+\\
+To improve reliability, the assumption was made a worker node may fail at any given point in time.
+To adequately build the system to handle this, we have introduced Chaosmonkey.
+Chaosmonkey can be configured to run at a certain interval with a certain probability, in case it runs it will pick a worker node and destroy it.
+For this it communicates directly with Amazon, so neither the worker nor the master instance know what happened and should simply react to the results of the healthcheck.
+However, it will log this to the master instance log, such that an operator can easily see this was an intended failure.
 
 \subsection{System Policies}
 
+The system always uses a elastic scaling policy. There are several parameters which can be set to define the policy.
+
+\begin{enumerate}
+\item A task should not be waiting for over a certain number of seconds.
+If that is the case, under-capacity is anticipated and new nodes are provisioned.
+\item The ratio between tasks and nodes should not exceed a set threshold. It that is the case, it is assumed that there is too little capacity, so a new node is provisioned.
+\item While a new node is being provisioned, no other provisioning will start
+\item A maximum number of nodes can be specified to avoid very high costs by a dDos similar attack.
+\end{enumerate}
+
+As one can see the provisioning scheme is fairly conservative.
+There are several good reasons for this.
+First from talks at WantCloud it was discovered an incidental delay is not problematic.
+Secondly many \textit{eager} provisioning schemes in the cloud suffer from oscillation, where a set of nodes is constantly being created and terminated.
+In the time between their creation and termination, they cannot complete a job (and hence are a waste of resources and money).
+Hence in this case the decision was made to focus on cost-efficiency over performance.
+\\
+\\
+Once a VM goes idle and there is no new job for it to process, it will be terminated.
+Using the provisioning policy this is not an issue, since no new node will be started immediately, but the system waits for a node to become free (or at some point will start a new node).
 
 \section{Experimental Results}
 %Recommended size 1.5 pages
