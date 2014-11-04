@@ -1,5 +1,7 @@
 \documentclass[a4paper]{IEEEtran}
 
+\usepackage[numbers,square,comma]{natbib}
+
 \title{Cloud Computing: \\ Report}
 \author{Steffan Norberhuis\\ 1509306 \and
  Rogier Slag\\ 1507761}
@@ -19,21 +21,19 @@
 
 
 \section{Introduction}
-%Recommended size abstract and introduction 1 page
-%Describe the problem
 
-%Related work
-
-%To be implemented system
-
-%structure of arcticle
+WantCloud B.V. is the European market leader in fast and cheap video conversion. Unfortunately, their server systems are quite outdated and therefore expensive to run. If no action is taken now, they might lose their competitive advantage.\\
+\\
+To remain market leader and lower waiting times when there is a high demand, the CEO of WantCloud requested an in-depth investigation of the possibilities to utilize external resources, such as an IaaS-provider (Instrastructure as a Service). Using such a provider, WantCloud would be able to use and pay for the exact number of machines required at any point in time. Additionally, no more local system administrators would have to be preoccupied with hardware related incidents, such as failing disks.\\
+\\
+In this paper we propose an alternative solution and present an implementation, complete with benchmarks. As is currently the case, FFMPEG is used to handle the video conversion itself, Amazon Web Services is used as an IaaS-provider. The software is developed in Java. For provisioning related activity, SSH is used.\\
+\\
+\textit{Proposed solution}: Using the flexibility of EC2, Amazons cloud computing platform, we can continuously run one instance to monitor the number of requested jobs, the cluster status and notify customers once their jobs completed. This instance therefore performs the roles of \textit{scheduler}, \textit{provisioner}, and \textit{health checker}. The probability this node goes down is low, and in case it goes down it may easily be restarted on any other node.\\
+Additionally the provisioner can start extra workers, using the API made available by Amazon. It does this based on parameters which can easily be modified, such as maximum task to worker ratio, max number of workers, or maximum waiting time. Since the system runs many workers, the likelihood of one failing is much larger. Hence in case of a failure the worker should be terminated, removed from the cluster and its jobs rescheduled.\\
+\\
+This paper is set up as follows. Section 3 will deal with the background of the application. Section 4 will explore the design of the system and any policies involved. Section 5 will show the experimental setup and show and interpret the benchmarks which were run. In section 6 a discussion is done over the results. This then leads to a conclusion in section 7.
 
 \section{Background on Application}
-%1-3 paragraph
-%Describe application
-
-%Requirements
-
 
 \section{System Design}
 %Recommended Size 1.5 pages
@@ -83,6 +83,10 @@
 \section{Discussion}
 
 \section{Conclusion}
+
+\bibliography{bibliography}
+\bibliographystyle{unsrtnat}
+
 
 \appendix
 \section{Time Sheets}
