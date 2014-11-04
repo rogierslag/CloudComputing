@@ -17,6 +17,7 @@ import main.Main;
 
 import org.joda.time.DateTime;
 
+import workload.WorkLoadGenerator;
 import amazon.Credentials;
 
 import com.amazonaws.services.s3.AmazonS3Client;
@@ -113,7 +114,7 @@ public class Scheduler implements IMessageHandler {
 						tmp.setStatus(Task.Status.QUEUED);
 						// the assignment to a node is done by another method
 						taskQueue.add(tmp);
-						log.trace("Added task to scheduler queue: {}", tmp);
+						log.info("Added task to scheduler queue: {}", tmp);
 					} else {
 						// We have a precomputed one!
 						// So we should definitely do something here
@@ -285,6 +286,9 @@ public class Scheduler implements IMessageHandler {
 				scheduler.stop();
 			}
 		});
+
+		final WorkLoadGenerator wlg = new WorkLoadGenerator(main.getCredentials(), main.getProperties());
+		new Thread(wlg).start();
 	}
 
 }

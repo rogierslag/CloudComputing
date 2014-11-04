@@ -42,7 +42,7 @@ public class WorkLoadGenerator implements Runnable {
 	public String generateTask() throws IOException {
 		// Randomly decide if a previously scheduled task will be created or
 		// a new task.
-		log.trace("Created a new task.");
+		log.info("Created a new task.");
 		TestTask task;
 		double newTask = random.nextDouble();
 		if (newTask >= newTaskThreshold) {
