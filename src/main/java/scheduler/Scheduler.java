@@ -280,6 +280,18 @@ public class Scheduler implements IMessageHandler {
 	}
 
 	/**
+	 * Empties the input bucket
+	 */
+	public void emptyInput() {
+		String inputBucket = properties.getProperty("aws.s3.input", "input");
+		ObjectListing list = s3Client.listObjects(inputBucket);
+		List<S3ObjectSummary> objects = list.getObjectSummaries();
+		for (S3ObjectSummary object : objects) {
+			s3Client.deleteObject(inputBucket,object.getKey());
+		}
+	}
+
+	/**
 	 * Send a message to the cluster
 	 * 
 	 * @param m
