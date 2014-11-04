@@ -7,7 +7,7 @@ sleep 10
 
 echo "Git checkout is done" > /tmp/start.log 2>&1;
 cd /home/ubuntu/CloudComputing >> /tmp/start.log 2>&1;
-git checkout monitor >> /tmp/start.log 2>&1;
+git checkout monitoring >> /tmp/start.log 2>&1;
 git pull >> /tmp/start.log 2>&1;
 cp /home/ubuntu/CloudComputing/jgroups_discovery.xml.example /home/ubuntu/CloudComputing/jgroups_discovery.xml >> /tmp/start.log 2>&1;
 cp /home/ubuntu/CloudComputing/scheduler.properties.example /home/ubuntu/CloudComputing/scheduler.properties  >> /tmp/start.log 2>&1;

@@ -2,6 +2,9 @@ package communication;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.jgroups.Message;
+import org.jgroups.ReceiverAdapter;
+
 /**
  * Created by Rogier on 31-10-14.
  */
