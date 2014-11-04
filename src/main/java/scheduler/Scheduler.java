@@ -245,7 +245,7 @@ public class Scheduler implements IMessageHandler {
 				break;
 			}
 		}
-		log.trace("Done with task: {}", task);
+		log.info("Monitor: done with task: {}", task);
 		task.setStatus(status);
 	}
 

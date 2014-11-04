@@ -71,6 +71,7 @@ public class Provisioner {
 		return new Runnable() {
 			@Override
 			public void run() {
+				log.info("Monitor: #workers: {}.", nodes.size());
 				log.trace("Going to check how busy we are");
 				List<Task> waitingTasks = parent.waitingTasks();
 
@@ -141,7 +142,7 @@ public class Provisioner {
 			t.setStatus(Task.Status.QUEUED);
 			t.setAssignedNode(null);
 		}
-		log.trace("Node {} is about to be removed", remove);
+		log.info("Monitor: Node {} is about to be removed", remove);
 		nodes.remove(remove);
 		List<String> list = new ArrayList<String>(1);
 		list.add(remove.getInstanceId());
@@ -172,7 +173,7 @@ public class Provisioner {
 		RunInstancesResult runInstances = ec2Client.runInstances(runInstancesRequest);
 
 		String instanceId = runInstances.getReservation().getInstances().get(0).getInstanceId();
-		log.trace("New instance has instanceId '{}'", instanceId);
+		log.info("Monitor: New worker '{}'", instanceId);
 		String privateIp = null;
 
 		/*
