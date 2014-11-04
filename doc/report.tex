@@ -41,7 +41,7 @@ The system is designed using a regular client-server model.
 Customers can upload their videos using the application.
 The application (not part of this implementation) uploads the video to an Amazon S3 bucket.
 This bucket is regularly scanned by the master instance, which generates job and places them into a queue.
-The master instance then assigns these jobs to machines, based on creation time.
+The master instance then assigns these jobs to machines, based on a first-come-first-serve principle.
 Once a job is done, the result is saved to another Amazon S3 bucket, where the file is available for downloads.
 \\
 This approach has multiple advantages.
