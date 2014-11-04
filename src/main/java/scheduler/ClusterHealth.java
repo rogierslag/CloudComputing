@@ -9,11 +9,12 @@ import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import lombok.Synchronized;
+import lombok.extern.slf4j.Slf4j;
+
 import communication.ClusterMessage;
 import communication.Communicator;
 import communication.IMessageHandler;
-import lombok.Synchronized;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * Created by Rogier on 01-11-14.
@@ -32,8 +33,7 @@ public class ClusterHealth implements IMessageHandler {
 	private int maxMissedHealthchecks;
 	private int ChaosMinimumNodes;
 
-	public ClusterHealth(Scheduler parent, ScheduledExecutorService executorService, List<Node> nodes,
-			Properties properties) {
+	public ClusterHealth(Scheduler parent, ScheduledExecutorService executorService, List<Node> nodes, Properties properties) {
 		this.parent = parent;
 		this.nodes = nodes;
 
@@ -42,14 +42,14 @@ public class ClusterHealth implements IMessageHandler {
 		this.ChaosMinimumNodes = Integer.parseInt(properties.getProperty("cluster_health.min_nodes", "5"));
 
 		this.communicator = new Communicator(this, Communicator.type.HEALTH_CHECK, "healthcheck");
-		executorService.scheduleWithFixedDelay(checkForClusterLiveness(), 5, Integer.parseInt(
-				properties.getProperty("cluster_health.interval", "5")), TimeUnit.SECONDS);
-		executorService.scheduleWithFixedDelay(causeChaos(), 30, Integer.parseInt(
-				properties.getProperty("cluster_health.chaos_interval", "60")), TimeUnit.SECONDS);
+		executorService.scheduleWithFixedDelay(checkForClusterLiveness(), 5, Integer.parseInt(properties.getProperty("cluster_health.interval", "5")), TimeUnit.SECONDS);
+		executorService.scheduleWithFixedDelay(causeChaos(), 30, Integer.parseInt(properties.getProperty("cluster_health.chaos_interval", "60")), TimeUnit.SECONDS);
 	}
 
 	/**
-	 * This is the ChaosMonkey which may knock instances down in order to test resilience against failures
+	 * This is the ChaosMonkey which may knock instances down in order to test
+	 * resilience against failures
+	 * 
 	 * @return the runnable which may or may not take stuff down
 	 */
 	private Runnable causeChaos() {
@@ -73,46 +73,47 @@ public class ClusterHealth implements IMessageHandler {
 	}
 
 	/**
-	 * Checks all the nodes in the cluster to determine if they are still alive. In case a host does not respond to
-	 * three healthchecks in a row, it is removed from the cluster and also terminated by EC2.
-	 *
+	 * Checks all the nodes in the cluster to determine if they are still alive.
+	 * In case a host does not respond to three healthchecks in a row, it is
+	 * removed from the cluster and also terminated by EC2.
+	 * 
 	 * @return Runnable for the executorservice
 	 */
 	@Synchronized
 	private Runnable checkForClusterLiveness() {
 		return new Runnable() {
 			public void run() {
-				log.info("The following nodes were alive during the last healthcheck: {}",
-						healthcheckReplies);
+				log.trace("The following nodes were alive during the last healthcheck: {}", healthcheckReplies);
 
 				if (healthcheckReplies != null) {
 
 					/*
-					 * We check every node in the `nodes` arrayList. If it did not reply to the healthcheck,
-					 * we increase
-					 * the missedhealthcheck by one 1 for that host. Once it goes over 3, the node is terminated.
-					 *
-					 * If it does respond an entry of the missedhealthcheck is removed (if applicable)
+					 * We check every node in the `nodes` arrayList. If it did
+					 * not reply to the healthcheck, we increase the
+					 * missedhealthcheck by one 1 for that host. Once it goes
+					 * over 3, the node is terminated.
+					 * 
+					 * If it does respond an entry of the missedhealthcheck is
+					 * removed (if applicable)
 					 */
 					List<Node> toTerminate = new ArrayList<Node>();
 					for (Node n : nodes) {
 						if (!healthcheckReplies.contains(n.getInstanceId())) {
 							nodeMissedHealthcheck(toTerminate, n);
-						}
-						else {
+						} else {
 							missedHealthchecks.remove(n.getInstanceId());
 						}
 					}
 					for (Node n : toTerminate) {
-						log.info("Destroying node {}", n);
+						log.trace("Destroying node {}", n);
 						parent.getProvisioner().destroyExistingNode(n, true);
 					}
 
 				}
 
 				/*
-				 * Send a new round of healthcheck messages.
-				 * The map we send with random data ensures we know the replies are recent,
+				 * Send a new round of healthcheck messages. The map we send
+				 * with random data ensures we know the replies are recent,
 				 * hence nodes are not a few minutes behind with replying
 				 */
 				healthcheckReplies = new ArrayList<String>();
@@ -127,9 +128,13 @@ public class ClusterHealth implements IMessageHandler {
 	}
 
 	/**
-	 * Handle a node with a failed healthcheck and possibly add it to the list of termination nodes
-	 * @param toTerminate List of nodes to be terminated
-	 * @param n Node which missed the healthcheck
+	 * Handle a node with a failed healthcheck and possibly add it to the list
+	 * of termination nodes
+	 * 
+	 * @param toTerminate
+	 *            List of nodes to be terminated
+	 * @param n
+	 *            Node which missed the healthcheck
 	 */
 	private void nodeMissedHealthcheck(List<Node> toTerminate, Node n) {
 		if (missedHealthchecks.containsKey(n.getInstanceId())) {
@@ -141,15 +146,11 @@ public class ClusterHealth implements IMessageHandler {
 					t.setStatus(Task.Status.QUEUED);
 					t.setAssignedNode(null);
 				}
+			} else {
+				log.warn("{} missed {} healthchecks", n, missedCount);
+				missedHealthchecks.put(n.getInstanceId(), missedCount);
 			}
-			else {
-				log.warn("{} missed {} healthchecks", n,
-						missedCount);
-				missedHealthchecks.put(n.getInstanceId(),
-						missedCount);
-			}
-		}
-		else {
+		} else {
 			missedHealthchecks.put(n.getInstanceId(), 1);
 		}
 	}
@@ -157,7 +158,7 @@ public class ClusterHealth implements IMessageHandler {
 	@Override
 	public void handleMessage(ClusterMessage m) {
 		if (m.getMessageType().equals("healthcheck-response")) {
-			//			log.info("Received HC: {}",m);
+			log.trace("Received HC: {}", m);
 			receivedHealthCheckReply(m);
 		}
 	}
@@ -169,7 +170,9 @@ public class ClusterHealth implements IMessageHandler {
 
 	/**
 	 * Check if a certain instance is online
-	 * @param instanceId the instance ID of the instance
+	 * 
+	 * @param instanceId
+	 *            the instance ID of the instance
 	 * @return whether or not the instance is online
 	 */
 	public boolean isAlive(String instanceId) {
@@ -178,8 +181,9 @@ public class ClusterHealth implements IMessageHandler {
 
 	/**
 	 * Process a healthcheck response message
-	 *
-	 * @param m the response
+	 * 
+	 * @param m
+	 *            the response
 	 */
 	private void receivedHealthCheckReply(ClusterMessage m) {
 		if (m.getData().equals(this.healthcheckMap) && !this.healthcheckReplies.contains(m.getSenderIdentifier())) {

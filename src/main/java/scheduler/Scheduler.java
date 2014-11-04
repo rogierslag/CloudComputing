@@ -10,18 +10,23 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import lombok.Getter;
+import lombok.Synchronized;
+import lombok.extern.slf4j.Slf4j;
+import main.Main;
+
+import org.joda.time.DateTime;
+
+import scheduler.Task.Status;
+import workload.WorkLoadGenerator;
 import amazon.Credentials;
+
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import communication.ClusterMessage;
 import communication.Communicator;
 import communication.IMessageHandler;
-import lombok.Getter;
-import lombok.Synchronized;
-import lombok.extern.slf4j.Slf4j;
-import main.Main;
-import org.joda.time.DateTime;
 
 /**
  * Created by Rogier on 17-10-14.
@@ -50,7 +55,8 @@ public class Scheduler implements IMessageHandler {
 	private final Provisioner provisioner;
 
 	/**
-	 * Create the scheduler. Reads the properties, starts and S3 client and starts scheduling the poll tasks
+	 * Create the scheduler. Reads the properties, starts and S3 client and
+	 * starts scheduling the poll tasks
 	 */
 	public Scheduler(Credentials awsCredentials, Properties properties) {
 		this.properties = properties;
@@ -58,22 +64,24 @@ public class Scheduler implements IMessageHandler {
 		s3Client = new AmazonS3Client(awsCredentials);
 
 		comm = new Communicator(this);
-		provisioner = new Provisioner(this,executorService, nodes, taskQueue, awsCredentials, properties);
-		clusterHealth =new ClusterHealth(this, executorService, nodes, properties);
+		provisioner = new Provisioner(this, executorService, nodes, taskQueue, awsCredentials, properties);
+		clusterHealth = new ClusterHealth(this, executorService, nodes, properties);
 
 		// Every task will start another one in succession. This ensures in case
 		// of a high load not all tasks are
 		// interfering and makes it easier to reason about stuff and things
-		executorService.scheduleWithFixedDelay(this.checkForTasks(), 5,
-				Integer.parseInt(properties.getProperty("aws.s3.check_interval", "10")), TimeUnit.SECONDS);
-		executorService.scheduleWithFixedDelay(this.assignTaskToNode(), 5,
-				Integer.parseInt(properties.getProperty("scheduler.assign_interval", "10")), TimeUnit.SECONDS);
-		executorService.scheduleAtFixedRate(new Runnable() {public void run() { log.info(waitingTasks().toString()); } },10,30,TimeUnit.SECONDS);
+		executorService.scheduleWithFixedDelay(this.checkForTasks(), 5, Integer.parseInt(properties.getProperty("aws.s3.check_interval", "10")), TimeUnit.SECONDS);
+		executorService.scheduleWithFixedDelay(this.assignTaskToNode(), 5, Integer.parseInt(properties.getProperty("scheduler.assign_interval", "10")), TimeUnit.SECONDS);
+		executorService.scheduleAtFixedRate(new Runnable() {
+			public void run() {
+				log.trace(waitingTasks().toString());
+			}
+		}, 10, 30, TimeUnit.SECONDS);
 	}
 
 	/**
 	 * Checks if there are any new tasks and adds them to the queue if required
-	 *
+	 * 
 	 * @return A Runnable object for the executorservice
 	 */
 	@Synchronized
@@ -92,11 +100,13 @@ public class Scheduler implements IMessageHandler {
 				Collections.shuffle(objects);
 				for (S3ObjectSummary object : objects) {
 					Task tmp = new Task(object.getKey());
-					/* The equals only checks on the `inputFile` so we can
+					/*
+					 * The equals only checks on the `inputFile` so we can
 					 * safely do this
 					 */
 					if (!taskQueue.contains(tmp)) {
-						/* If we do not yet have the task, add the other data
+						/*
+						 * If we do not yet have the task, add the other data
 						 * and schedule it
 						 */
 						tmp.setCreated_at(DateTime.now());
@@ -105,22 +115,38 @@ public class Scheduler implements IMessageHandler {
 						tmp.setStatus(Task.Status.QUEUED);
 						// the assignment to a node is done by another method
 						taskQueue.add(tmp);
-						log.info("Added task to scheduler queue: {}", tmp);
-					}
-					else {
+						log.trace("Added task to scheduler queue: {}", tmp);
+					} else {
 						// We have a precomputed one!
 						// So we should definitely do something here
 						// TODO
 					}
 				}
+				// log the current Task Queue for monitoring.
+				logTaskQueue();
 			}
+
 		};
 	}
 
+	private void logTaskQueue() {
+		DateTime currentTime = new DateTime();
+		DateTime longestDelay = currentTime;
+		List<Task> queuedTasks = waitingTasks();
+		for (Task task : queuedTasks) {
+			if (task.getStatus() == Status.QUEUED && task.getCreated_at().isBefore(longestDelay)) {
+				longestDelay = task.getCreated_at();
+			}
+		}
+		log.info("Monitor: #task queued: {} , longest delay: {}s.", queuedTasks.size(), (currentTime.getMillis() - longestDelay.getMillis()) / 1000);
+
+	}
+
 	/**
-	 * Assigns waiting tasks to nodes. It therefor picks a free node and the longest-waiting task, and matches them. In
-	 * case there are no waiting tasks or free nodes, it does nothing
-	 *
+	 * Assigns waiting tasks to nodes. It therefor picks a free node and the
+	 * longest-waiting task, and matches them. In case there are no waiting
+	 * tasks or free nodes, it does nothing
+	 * 
 	 * @return
 	 */
 	@Synchronized
@@ -146,13 +172,14 @@ public class Scheduler implements IMessageHandler {
 				map.put("outputFile", assignTask.getOutputFile());
 				m.setData(map);
 				sendMessage(m);
-				log.info("Assigned task {} to {}", assignTask, assignTo);
+				log.trace("Assigned task {} to {}", assignTask, assignTo);
 			}
 		};
 	}
 
 	/**
 	 * Get the list of waiting tasks
+	 * 
 	 * @return list of waiting tasks
 	 */
 	protected List<Task> waitingTasks() {
@@ -167,8 +194,9 @@ public class Scheduler implements IMessageHandler {
 
 	/**
 	 * Get the first waiting task
-	 *
-	 * @return The task which was waiting for the longest time or null if no waiting task was found
+	 * 
+	 * @return The task which was waiting for the longest time or null if no
+	 *         waiting task was found
 	 */
 	private Task getFirstTask() {
 		if (taskQueue.size() > 0) {
@@ -183,7 +211,7 @@ public class Scheduler implements IMessageHandler {
 
 	/**
 	 * Get an idle node
-	 *
+	 * 
 	 * @return An idle node or null if no idle node was present
 	 */
 	private Node getIdleNode() {
@@ -199,15 +227,16 @@ public class Scheduler implements IMessageHandler {
 	 * Stops the remaining threads which the scheduler has spawned
 	 */
 	public void stop() {
-		log.info("Stopping the scheduler");
+		log.trace("Stopping the scheduler");
 		executorService.shutdownNow();
 	}
 
 	/**
 	 * Set a task in the QUEUE to finished
-	 *
-	 * @param taskRepresentation A task object with the same inputfile field, so we can find the actual task in the
-	 *                           queue
+	 * 
+	 * @param taskRepresentation
+	 *            A task object with the same inputfile field, so we can find
+	 *            the actual task in the queue
 	 */
 	public void removeTaskFromQueue(Task taskRepresentation, Task.Status status) {
 		Task task = null;
@@ -217,14 +246,15 @@ public class Scheduler implements IMessageHandler {
 				break;
 			}
 		}
-		log.info("Done with task: {}", task);
+		log.info("Monitor: finished task.", task);
 		task.setStatus(status);
 	}
 
 	/**
 	 * Handle an incoming message
-	 *
-	 * @param m the message which was received
+	 * 
+	 * @param m
+	 *            the message which was received
 	 */
 	public void handleMessage(ClusterMessage m) {
 		// Additionally, if a node reports success I should update my status
@@ -251,8 +281,9 @@ public class Scheduler implements IMessageHandler {
 
 	/**
 	 * Send a message to the cluster
-	 *
-	 * @param m the message to send
+	 * 
+	 * @param m
+	 *            the message to send
 	 */
 	public void sendMessage(ClusterMessage m) {
 		this.comm.send(m);
@@ -260,8 +291,9 @@ public class Scheduler implements IMessageHandler {
 
 	/**
 	 * This is just how we start the thing
-	 *
-	 * @param args _unused_
+	 * 
+	 * @param args
+	 *            _unused_
 	 */
 	public static void main(String[] args) {
 		Main main = new Main();
@@ -271,6 +303,9 @@ public class Scheduler implements IMessageHandler {
 				scheduler.stop();
 			}
 		});
+
+		final WorkLoadGenerator wlg = new WorkLoadGenerator(main.getCredentials(), main.getProperties());
+		new Thread(wlg).start();
 	}
 
 }
