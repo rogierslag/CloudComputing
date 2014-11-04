@@ -5,13 +5,14 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+import lombok.extern.slf4j.Slf4j;
+import main.Main;
+
 import com.amazonaws.services.s3.transfer.Download;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.Upload;
 import communication.ClusterMessage;
 import communication.Communicator;
-import lombok.extern.slf4j.Slf4j;
-import main.Main;
 
 /**
  * Task that can be scheduled and executed.
@@ -29,7 +30,9 @@ public class EncodingTask implements ITask {
 
 	/**
 	 * Creates a runnable which can be fed into a Thread
-	 * @param comm The communicator for reporting the status
+	 * 
+	 * @param comm
+	 *            The communicator for reporting the status
 	 * @return Thread input
 	 */
 	public Runnable createWorkTask(final Communicator comm) {
@@ -37,30 +40,29 @@ public class EncodingTask implements ITask {
 			public void run() {
 				Main main = new Main();
 
-				// This is a better and faster way to copy to S3 (otherwise timeouts)
+				// This is a better and faster way to copy to S3 (otherwise
+				// timeouts)
 				TransferManager tx = new TransferManager(main.getCredentials());
 
 				for (int i = 0; i < 3; i++) {
 					try {
-						log.info("Copying the file to myself");
+						log.trace("Copying the file to myself");
 						File file = new File("/tmp/currentInputFile");
-						Download dl = tx.download(main.getProperties().getProperty("aws.s3.input"), inputFile,
-								file);
+						Download dl = tx.download(main.getProperties().getProperty("aws.s3.input"), inputFile, file);
 						dl.waitForCompletion();
 
-						log.info("Got the file locally now!");
+						log.trace("Got the file locally now!");
 
-						log.info("Started conversion");
+						log.trace("Started conversion");
 						EncodingTask et = new EncodingTask("/tmp/currentInputFile", "/tmp/currentOutputFile.mp4");
 						Result r = et.executeTask();
-						log.info("Result was {}", r);
+						log.trace("Result was {}", r);
 						if (r == Result.Success) {
-							Upload ul = tx.upload(main.getProperties().getProperty("aws.s3.output"), inputFile,
-									new File("/tmp/currentOutputFile.mp4"));
+							Upload ul = tx.upload(main.getProperties().getProperty("aws.s3.output"), inputFile, new File("/tmp/currentOutputFile.mp4"));
 							ul.waitForCompletion();
 
 							// Communicate back, delete from from input bucket
-							log.info("conversion was done and file waz sent back to S3");
+							log.trace("conversion was done and file waz sent back to S3");
 							tx.shutdownNow();
 							// s3Client.deleteObject(main.getProperties().getProperty("aws.s3.input"),inputFile);
 
@@ -75,8 +77,7 @@ public class EncodingTask implements ITask {
 							comm.send(m);
 							return;
 						}
-					}
-					catch (Exception e) {
+					} catch (Exception e) {
 						log.error("Something went terribly wrong", e);
 					}
 					log.warn("Iteration {} of 3 failed.", i);
@@ -99,6 +100,7 @@ public class EncodingTask implements ITask {
 
 	/**
 	 * Executes the conversion task
+	 * 
 	 * @return Well you should be able to figure that out from the Enum
 	 */
 	private Result executeTask() {
@@ -107,16 +109,14 @@ public class EncodingTask implements ITask {
 		pb.redirectOutput(new File("/tmp/output.log"));
 		try {
 			Process ffmpeg = pb.start();
-			log.info(pb.command().toString());
+			log.trace(pb.command().toString());
 			if (ffmpeg.waitFor() == 0) {
 				return Result.Success;
 			}
-		}
-		catch (IOException e) {
+		} catch (IOException e) {
 			e.printStackTrace();
 			return Result.Failure;
-		}
-		catch (InterruptedException e) {
+		} catch (InterruptedException e) {
 			e.printStackTrace();
 			return Result.Failure;
 		}

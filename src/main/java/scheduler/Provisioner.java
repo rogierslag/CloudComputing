@@ -10,6 +10,11 @@ import java.util.Properties;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import lombok.extern.slf4j.Slf4j;
+
+import org.apache.commons.codec.binary.Base64;
+import org.joda.time.DateTime;
+
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.services.ec2.AmazonEC2Client;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
@@ -21,9 +26,6 @@ import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.codec.binary.Base64;
-import org.joda.time.DateTime;
 
 /**
  * Created by Rogier on 01-11-14.
@@ -43,11 +45,7 @@ public class Provisioner {
 	private boolean isCreating = false;
 	private int maxNodes;
 
-
-	public Provisioner(Scheduler parent, ScheduledExecutorService executorService, List<Node> nodes,
-			List<Task> taskQueue,
-			AWSCredentials awsCredentials,
-			Properties properties) {
+	public Provisioner(Scheduler parent, ScheduledExecutorService executorService, List<Node> nodes, List<Task> taskQueue, AWSCredentials awsCredentials, Properties properties) {
 		this.parent = parent;
 		this.nodes = nodes;
 		this.properties = properties;
@@ -60,30 +58,28 @@ public class Provisioner {
 		ec2Client = new AmazonEC2Client(awsCredentials);
 		ec2Client.setEndpoint("ec2.eu-west-1.amazonaws.com");
 
-		executorService.scheduleWithFixedDelay(checkForNodeAdjustments(), 5,
-				Integer.parseInt(properties.getProperty("provision.check_load_interval", "15")), TimeUnit.SECONDS);
+		executorService.scheduleWithFixedDelay(checkForNodeAdjustments(), 5, Integer.parseInt(properties.getProperty("provision.check_load_interval", "15")), TimeUnit.SECONDS);
 	}
 
 	/**
-	 * Checks if we need to adjust our node count and does do if required. The log messages make this methods
-	 * relatively
-	 * self-explanatory
-	 *
+	 * Checks if we need to adjust our node count and does do if required. The
+	 * log messages make this methods relatively self-explanatory
+	 * 
 	 * @return Runnable for the scheduler
 	 */
 	private Runnable checkForNodeAdjustments() {
 		return new Runnable() {
 			@Override
 			public void run() {
-				log.info("Going to check how busy we are");
+				log.info("Monitor: #workers: {}.", nodes.size());
+				log.trace("Going to check how busy we are");
 				List<Task> waitingTasks = parent.waitingTasks();
 
-				log.info("We have exactly {} waiting tasks", waitingTasks.size());
+				log.trace("We have exactly {} waiting tasks", waitingTasks.size());
 				if (waitingTasks.size() > 0 && nodes.isEmpty()) {
-					log.info("We have tasks, but no node. Always provision one");
+					log.trace("We have tasks, but no node. Always provision one");
 					provisionNewNode();
-				}
-				else if (waitingTasks.size() == 0 && !nodes.isEmpty()) {
+				} else if (waitingTasks.size() == 0 && !nodes.isEmpty()) {
 					Node toRemove = null;
 					for (Node toCheck : nodes) {
 						if (toCheck.getAssignedTasks().isEmpty()) {
@@ -93,24 +89,18 @@ public class Provisioner {
 					}
 					if (toRemove != null) {
 						// Destroy the node without tasks
-						log.info("We have no tasks, but we do have nodes. Delete node '{}'", toRemove);
+						log.trace("We have no tasks, but we do have nodes. Delete node '{}'", toRemove);
 						destroyExistingNode(toRemove);
 					}
-				}
-				else if (!isCreating && nodes.size() < maxNodes && waitingTasks.size() > 0 &&
-						waitingTasks.get(0).getCreated_at().isBefore(new DateTime().minusSeconds(maxWaitingTime))) {
-					log.info("A task was waiting for more than {} seconds, which is long, so we need a new node",
-							maxWaitingTime);
+				} else if (!isCreating && nodes.size() < maxNodes && waitingTasks.size() > 0
+						&& waitingTasks.get(0).getCreated_at().isBefore(new DateTime().minusSeconds(maxWaitingTime))) {
+					log.trace("A task was waiting for more than {} seconds, which is long, so we need a new node", maxWaitingTime);
 					provisionNewNode();
-				}
-				else if (!isCreating && nodes.size() < maxNodes
-						&& waitingTasks.size() > maxTasksNodesRatio * nodes.size()) {
-					log.info("There are currently {} times more tasks than nodes, so we should add capacity",
-							maxTasksNodesRatio);
+				} else if (!isCreating && nodes.size() < maxNodes && waitingTasks.size() > maxTasksNodesRatio * nodes.size()) {
+					log.trace("There are currently {} times more tasks than nodes, so we should add capacity", maxTasksNodesRatio);
 					provisionNewNode();
-				}
-				else {
-					log.info("Apparantly we do not need more nodes than we already have: {}", nodes);
+				} else {
+					log.trace("Apparantly we do not need more nodes than we already have: {}", nodes);
 				}
 			}
 		};
@@ -118,8 +108,9 @@ public class Provisioner {
 
 	/**
 	 * Destroy a node it possible (no force)
-	 *
-	 * @param remove The node to be removed
+	 * 
+	 * @param remove
+	 *            The node to be removed
 	 */
 	public void destroyExistingNode(Node remove) {
 		destroyExistingNode(remove, false);
@@ -127,9 +118,12 @@ public class Provisioner {
 
 	/**
 	 * Destroys a node and removes it from the list of nodes if it was in there
-	 *
-	 * @param remove The node to remove
-	 * @param force  Whether or not the node should forcibly be removed (hence even with running tasks)
+	 * 
+	 * @param remove
+	 *            The node to remove
+	 * @param force
+	 *            Whether or not the node should forcibly be removed (hence even
+	 *            with running tasks)
 	 */
 	public void destroyExistingNode(Node remove, boolean force) {
 		if (isDestroying) {
@@ -139,7 +133,8 @@ public class Provisioner {
 		isDestroying = true;
 
 		if (!force && !remove.getAssignedTasks().isEmpty()) {
-			// In case the node has tasks and we are not forcing destroying, return and do nothing
+			// In case the node has tasks and we are not forcing destroying,
+			// return and do nothing
 			return;
 		}
 
@@ -147,7 +142,7 @@ public class Provisioner {
 			t.setStatus(Task.Status.QUEUED);
 			t.setAssignedNode(null);
 		}
-		log.info("Node {} is about to be removed", remove);
+		log.info("Monitor: Node {} is about to be removed", remove);
 		nodes.remove(remove);
 		List<String> list = new ArrayList<String>(1);
 		list.add(remove.getInstanceId());
@@ -155,7 +150,7 @@ public class Provisioner {
 		TerminateInstancesRequest terminateRequest = new TerminateInstancesRequest(list);
 		ec2Client.terminateInstances(terminateRequest);
 
-		log.info("Node {} is removed from the EC2 pool", remove);
+		log.trace("Node {} is removed from the EC2 pool", remove);
 		isDestroying = false;
 	}
 
@@ -169,24 +164,22 @@ public class Provisioner {
 		}
 		isCreating = true;
 
-		log.info("About to spin up an extra instance");
+		log.trace("About to spin up an extra instance");
 
-		RunInstancesRequest runInstancesRequest =
-				new RunInstancesRequest().withInstanceType(properties.getProperty("aws.ec2.type", "t2.micro"))
-						.withImageId(properties.getProperty("aws.ec2.image", "ami-b0b51cc7"))
-						.withMinCount(1)
-						.withMaxCount(1)
-						.withSecurityGroupIds(properties.getProperty("aws.ec2.security", "default"))
-						.withKeyName(properties.getProperty("aws.ec2.key", "scheduler"))
-						.withUserData(Base64.encodeBase64String(getScript("install_worker.sh").getBytes()));
+		RunInstancesRequest runInstancesRequest = new RunInstancesRequest().withInstanceType(properties.getProperty("aws.ec2.type", "t2.micro"))
+				.withImageId(properties.getProperty("aws.ec2.image", "ami-b0b51cc7")).withMinCount(1).withMaxCount(1)
+				.withSecurityGroupIds(properties.getProperty("aws.ec2.security", "default")).withKeyName(properties.getProperty("aws.ec2.key", "scheduler"))
+				.withUserData(Base64.encodeBase64String(getScript("install_worker.sh").getBytes()));
 		RunInstancesResult runInstances = ec2Client.runInstances(runInstancesRequest);
 
 		String instanceId = runInstances.getReservation().getInstances().get(0).getInstanceId();
-		log.info("New instance has instanceId '{}'", instanceId);
+		log.info("Monitor: New worker '{}'", instanceId);
 		String privateIp = null;
 
-		/* We dont get the IP from amazon directly, so we have to poll for it. Using a loop is the easiest way, since
-		 * there is no push possible of the information
+		/*
+		 * We dont get the IP from amazon directly, so we have to poll for it.
+		 * Using a loop is the easiest way, since there is no push possible of
+		 * the information
 		 */
 		for (int i = 0; i < 20; i++) {
 			try {
@@ -197,8 +190,7 @@ public class Provisioner {
 					privateIp = tmp;
 					break;
 				}
-			}
-			catch (IndexOutOfBoundsException e) {
+			} catch (IndexOutOfBoundsException e) {
 				// This exception is triggered if one of the get(0) calls does
 				// not work.
 				// And it is quite a lot of boilerplate to handle that
@@ -207,23 +199,22 @@ public class Provisioner {
 				// Sleep 6 seconds. With a total of 20 runs this gives AWS 120
 				// seconds to spinup
 				Thread.sleep(6000);
-			}
-			catch (Exception e) {
+			} catch (Exception e) {
 				e.printStackTrace();
 			}
 		}
 
 		/*
-		 * Using the `withUserData` method we install software on the node, however we also need to start it
-		 * The method `startNode` handles exactly that and does the maven magic. Once it returns the node is ready for
-		 * production
+		 * Using the `withUserData` method we install software on the node,
+		 * however we also need to start it The method `startNode` handles
+		 * exactly that and does the maven magic. Once it returns the node is
+		 * ready for production
 		 */
 		try {
 
-			log.info("Starting the software on the new node");
+			log.trace("Starting the software on the new node");
 			new Thread(startNode(privateIp, instanceId, properties)).start();
-		}
-		catch (JSchException e) {
+		} catch (JSchException e) {
 			// Wait whut
 			// When shit hits the fan, just cancel the thing
 			// This one triggers if SSH connection fail
@@ -238,8 +229,9 @@ public class Provisioner {
 
 	/**
 	 * Reads a script from disk and returns it as String
-	 *
-	 * @param file The script to read
+	 * 
+	 * @param file
+	 *            The script to read
 	 * @return The resulting string
 	 */
 	public static String getScript(String file) {
@@ -252,8 +244,7 @@ public class Provisioner {
 				result += line + "\n";
 			}
 			br.close();
-		}
-		catch (Exception e) {
+		} catch (Exception e) {
 			log.error("Could not read {} script", file, e);
 		}
 		return result;
@@ -261,21 +252,25 @@ public class Provisioner {
 
 	/**
 	 * Actually start the node with the software of a worker
-	 *
-	 * @param privateIp  the private IP addres to listen on
-	 * @param instanceId The instance ID as specified by AWS
-	 * @param settings   The properties to initialize with
-	 * @throws JSchException In case we cannot connect
+	 * 
+	 * @param privateIp
+	 *            the private IP addres to listen on
+	 * @param instanceId
+	 *            The instance ID as specified by AWS
+	 * @param settings
+	 *            The properties to initialize with
+	 * @throws JSchException
+	 *             In case we cannot connect
 	 */
-	private Runnable startNode(final String privateIp, final String instanceId,
-			final Properties settings) throws JSchException {
+	private Runnable startNode(final String privateIp, final String instanceId, final Properties settings) throws JSchException {
 		return new Runnable() {
 			public void run() {
 				for (int i = 0; i < 20; i++) {
 					try {
-				/*
-				 * Connect by SSH (private key) as the ubuntu user without StrictHostKeyChecking
-				 */
+						/*
+						 * Connect by SSH (private key) as the ubuntu user
+						 * without StrictHostKeyChecking
+						 */
 						JSch ssh = new JSch();
 						ssh.addIdentity("scheduler.priv");
 
@@ -284,51 +279,45 @@ public class Provisioner {
 						config.put("StrictHostKeyChecking", "no");
 						sshSession.setConfig(config);
 
-				/*
-				 * Get the `run_worker.sh` script, add the "secret" values and execute it remotely
-				 */
+						/*
+						 * Get the `run_worker.sh` script, add the "secret"
+						 * values and execute it remotely
+						 */
 						sshSession.connect();
 						ChannelExec channel = (ChannelExec) sshSession.openChannel("exec");
 
 						channel.setInputStream(null);
-						channel.setCommand(
-								getScript("run_worker.sh")
-										.replace("((access_key))", settings.getProperty("aws.s3.access_key"))
-										.replace("((secret_key))", settings.getProperty("aws.s3.secret_key"))
-										.replace("((private_ip))", privateIp)
-										.replace("((instance_id))", instanceId)
-						);
+						channel.setCommand(getScript("run_worker.sh").replace("((access_key))", settings.getProperty("aws.s3.access_key"))
+								.replace("((secret_key))", settings.getProperty("aws.s3.secret_key")).replace("((private_ip))", privateIp).replace("((instance_id))", instanceId));
 
-						log.info("Executing the commands on the new node");
+						log.trace("Executing the commands on the new node");
 						channel.connect();
 
-				/*
-				 * Wait for the command to finish executing
-				 */
+						/*
+						 * Wait for the command to finish executing
+						 */
 						while (true) {
 							if (channel.isClosed()) {
-								log.info("New node start had exit code: {}", channel.getExitStatus());
+								log.trace("New node start had exit code: {}", channel.getExitStatus());
 								break;
 							}
 							try {
 								Thread.sleep(1000);
-							}
-							catch (Exception ee) {
+							} catch (Exception ee) {
 							}
 						}
 						channel.disconnect();
 						sshSession.disconnect();
 
-						log.info("Give the node five minutes to come online");
+						log.trace("Give the node five minutes to come online");
 						for (int j = 0; j < 30; j++) {
 							if (parent.getClusterHealth().isAlive(instanceId)) {
-								log.info("We heard from the healthcheck this node is online, so lets stop waiting");
+								log.trace("We heard from the healthcheck this node is online, so lets stop waiting");
 								break;
 							}
 							try {
 								Thread.sleep(10000);
-							}
-							catch (InterruptedException e) {
+							} catch (InterruptedException e) {
 							}
 						}
 						try {
@@ -338,35 +327,34 @@ public class Provisioner {
 							// Other may start to create nodes again
 							isCreating = false;
 
-							log.info("Provisioned new node '{}'", node);
-							log.info("Now we have the following nodes: {}", nodes);
-							log.info("Node should be online!");
+							log.trace("Provisioned new node '{}'", node);
+							log.trace("Now we have the following nodes: {}", nodes);
+							log.trace("Node should be online!");
 							return;
-						}
-						catch (UnknownHostException e) {
+						} catch (UnknownHostException e) {
 							// Wait whut
 							// When shit hits the fan, just cancel the thing
-							// This one triggers if Amazon gives us a non-existing IP
+							// This one triggers if Amazon gives us a
+							// non-existing IP
 							// Or if we did not get a final IP in 120 seconds
-							log.error("Something went wrong when getting a new node, destroying instanceId {}",
-									instanceId);
+							log.error("Something went wrong when getting a new node, destroying instanceId {}", instanceId);
 							List<String> list = new ArrayList<String>(1);
 							list.add(instanceId);
 
 							TerminateInstancesRequest terminateRequest = new TerminateInstancesRequest(list);
 							ec2Client.terminateInstances(terminateRequest);
 						}
-					}
-					catch (Exception e) {
-						// This may happen in case we try to connect before the node is ready. Not a big deal
+					} catch (Exception e) {
+						// This may happen in case we try to connect before the
+						// node is ready. Not a big deal
 						log.warn("We hit an exception, but we will retry in a few seconds");
 					}
 					try {
-						// Sleep 6 seconds. With a total of 20 runs this gives AWS 120
+						// Sleep 6 seconds. With a total of 20 runs this gives
+						// AWS 120
 						// seconds to become accessible by SSH
 						Thread.sleep(6000);
-					}
-					catch (Exception e) {
+					} catch (Exception e) {
 						e.printStackTrace();
 					}
 				}
