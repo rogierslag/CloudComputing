@@ -177,28 +177,26 @@ Once a VM goes idle and there is no new job for it to process, it will be termin
 Using the provisioning policy this is not an issue, since no new node will be started immediately, but the system waits for a node to become free (or at some point will start a new node).
 
 \section{Experimental Results}
-In this section we will describe the experimental setup and the experiments themselves.
+In this section the experimental setup and the experiments themselves are described.
 Observations and experiments are also included in this section.
 
 \subsection{Experimental setup}
 %Describe working environments
 The system was developed for Amazon AWS and was tested on that platform.
-Amazon AWS provides different types of instances and we used \emph{t2.micro} instances.
-Our workload is mostly CPU intensive.
+Amazon AWS provides different types of instances and for this case the \emph{t2.micro} instances were used.
 These are the smallest instances provided and we could achieve higher performance on larger instances,
  but they were chosen because they are Free Tier eligible.
-Amazon describes these instances as CPU's operating at 2.5GHz and having 1 GB of memory.
+Video conversion itself is mostly CPU intensive, so the instances with 2.5GHz and 1 GB of memory could be outperformed by larger instances.
 
 %Describe general workload
-We created a workload generator that generates an artificial workload.
-The workload generator creates a new task at a regular interval and offers this task to the system using the input bucket.
+A specially designed workload generator creates a new task at a regular interval and offers this task to the system using the input bucket.
 The task can either be a completely new task or with a certain chance be a task already offered to the system before.
 The tasks consist of encoding a movie from one format to another format.
 
 %Describe monitoring tools and libraries
-To monitor the system we used \emph{The Simple Logging Facade for Java} (SLF4J) in combination with \emph{Log4J}.
+To monitor the system \emph{The Simple Logging Facade for Java} (SLF4J) in combination with \emph{Log4J} were used, which allowed optimal and tunable logging.
 SLF4J provides a facade for Log4J to allow other logging backends to be configured at runtime.
-We used simple logging output to measure the performance and other statistics of the system.
+For this specific case simple logging simple logging output was employed to measure the performance and other statistics of the system.
 %other tools
 
 \subsection{Experiments}
@@ -206,11 +204,10 @@ We used simple logging output to measure the performance and other statistics of
 %Desribe the experiments per system feature
 %Format: describe workload, present operation, analyze result.
 \subsubsection{Automation}
-We performed no specific experiments to test the automation of our system.
-But the other experiments have shown that we have achieved a very high level of automation.
-To start we only have to do a minimal amount of mandatory steps and after that the system runs fully without manual intervention.
-The first step is to create a EC2 instance that will act as a master instance.
-After that we upload the code and run an install script that sets up the master instance.
+No specific experiments were ran to test the automation of the proposed system, but the other experiments have shown that a very high level of automation was been achieved.
+To start only a handful of mandatory steps had to be done, after which the system runs completely without manual intervention.
+The first step is to create a EC2 instance which will act as a master instance.
+After that one uploads the code and runs an install script that sets up the master instance.
 The last step is to build the code and run it.
 
 \subsubsection{Elasticity}
@@ -224,11 +221,12 @@ A note has to be made that the timing is done with a granularity of 15 seconds, 
 But this experiment still gives a very good indication of the time it takes to provision a worker node.
 
 %Elasticity
-The second experiment we conducted is to have the workload generator generate 100 jobs with a random interval between 10 and 30 seconds.
-The experiment is to test that our provisioner provisions more nodes and terminates these nodes after the 100 jobs are completed.
+The second experiment that was conducted was to have the workload generator generate 100 jobs with a random interval between 10 and 30 seconds.
+The experiment is to test that our provisioner provisions more nodes and terminates these nodes after these 100 jobs are completed.
 At first the system builds a backlog of queues and the provisioner conservatively allocates more workers.
-After 27 minutes all jobs are finished and it can be seen that the provisioner quickly terminates the unnecessary workers.
-In this downscaling it is now conservative.
+After 27 minutes all jobs are finished and it can be seen that the provisioner quickly terminates the (now) unnecessary workers.
+While downscaling, a very eager approach is used.
+This helps to optimize for cost.
 At the end a tail can be seen where one worker is kept running.
 This data is plotted in Fig. \ref{fig:100-workers} and Fig. \ref{fig:100-tasks}.
 
@@ -246,9 +244,10 @@ This data is plotted in Fig. \ref{fig:100-workers} and Fig. \ref{fig:100-tasks}.
 
 \subsubsection{Performance}
 Load balancing is very important to achieve a higher utilization of the VMs.
-Early during the development of our system we measured the CPU utilization of our VMs.
-We found that ffmpeg is very effective and used the full CPU power during execution.
-As there is no more performance to be gained, we did not have to schedule more tasks on a single node to achieve higher utilization.
+Early during the development of the proposed system CPU utilization of the used VMs was measured.
+It was found that ffmpeg is very effective and used the full CPU power during execution.
+As there is no more performance to be gained, scheduling more tasks on a single node could not achieve a higher utilization.
+This was the main reason to let one node only work on one job at once.
 
 \subsubsection{Reliability}
 
