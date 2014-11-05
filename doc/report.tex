@@ -84,6 +84,14 @@ We used simple logging output to measure the performance and other statistics of
 \subsection{Experiments}
 %Desribe the experiments per system feature
 %Format: describe workload, present operation, analyze result.
+\subsubsection{Automation}
+We performed no specific experiments to test the automation of our system.
+But the other experiments have shown that we have achieved a very high level of automation.
+To start we only have to do a minimal amount of mandatory steps and after that the system runs fully without manual intervention.
+The first step is to create a EC2 instance that will act as a master instance.
+After that we upload the code and run an install script that sets up the master instance.
+The last step is to build the code and run it.
+
 \subsubsection{Provisioning}
 %Provisioning time
 In our first experiment we wanted to see how long it takes to provision a worker node and how long it takes before it is fully ready to service tasks.
