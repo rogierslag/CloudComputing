@@ -92,7 +92,7 @@ The first step is to create a EC2 instance that will act as a master instance.
 After that we upload the code and run an install script that sets up the master instance.
 The last step is to build the code and run it.
 
-\subsubsection{Provisioning}
+\subsubsection{Elasticity}
 %Provisioning time
 In our first experiment we wanted to see how long it takes to provision a worker node and how long it takes before it is fully ready to service tasks.
 Our experiment consists of the provisioner provisioning continiously a single worker after the previous worker becomes fully ready.
@@ -100,7 +100,7 @@ The experiment showed that the average and median time of provisioning a fully w
 The minimum time of provisioning was 2 minutes and the maximum 4 minutes and 47 seconds.
 A note has to be made that the timing is done with a granularity of 15 seconds, because that was the interval we checked if nodes came online.
 But this experiment still gives a very good indication of the time it takes to provision a worker node.
-
+%Elasticity
 The second experiment we conducted is to have the workload generator generate 100 jobs with a random interval between 10 and 30 seconds.
 The experiment is to test that our provisioner provisions more nodes and terminates these nodes after the 100 jobs are completed.
 At first the system builds a backlog of queues and the provisioner conservatively allocates more workers.
@@ -121,8 +121,11 @@ This data is plotted in Fig. \ref{fig:100-workers} and Fig. \ref{fig:100-tasks}.
 	\caption{Amount of queued tasks}
 \end{figure}
 
-\subsubsection{Allocation}
-One experiment we run 
+\subsubsection{Performance}
+Load balancing is very important to achieve a higher utilization of the VMs.
+Early during the development of our system we measured the CPU utilization of our VMs.
+We found that ffmpeg is very effective and used the full CPU power during execution.
+As there is no more performance to be gained, we did not have to schedule more tasks on a single node to achieve higher utilization.
 
 \subsubsection{Reliability}
 
