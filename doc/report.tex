@@ -214,6 +214,23 @@ Using the provisioning policy this is not an issue, since no new node will be st
 
 \section{Conclusion}
 
+In this report, a elastic cloud based system was proposed to handle different kinds of video conversion.
+Consequently, the performance and costs were analyzed for a representative test set using Amazon Web Services as an IaaS-provider.
+\\
+\\
+From the results in the experimental section we can see that the provisioning is done conservatively, whereas the termination of nodes is done eagerly.
+This provides a nice optimization for costs.
+\\
+\\
+On the other hand, once a node has been provisioned it will continue to perform jobs until there is no more work for it. 
+This will allow the system to fully utilize the node in order to minimize the non-production time (the time once one started paying for the computing power until the moment the node could start its first job).
+This timespan is mostly dependent on the cloud provider and the method of provisioning.
+Using very simple software on the nodes, the installation of the node can be done in around one minute.
+Another minute is needed to actually \textit{lease} the machine from the provider, in this case Amazon.
+\\
+\\
+
+
 \bibliography{bibliography}
 \bibliographystyle{unsrtnat}
 
