@@ -1,5 +1,6 @@
 \documentclass[a4paper]{IEEEtran}
 
+\usepackage{graphicx}
 \usepackage[numbers,square,comma]{natbib}
 \usepackage{hyperref}
 
@@ -184,23 +185,77 @@ Once a VM goes idle and there is no new job for it to process, it will be termin
 Using the provisioning policy this is not an issue, since no new node will be started immediately, but the system waits for a node to become free (or at some point will start a new node).
 
 \section{Experimental Results}
-%Recommended size 1.5 pages
+In this section the experimental setup and the experiments themselves are described.
+Observations and experiments are also included in this section.
 
 \subsection{Experimental setup}
 %Describe working environments
+The system was developed for Amazon AWS and was tested on that platform.
+Amazon AWS provides different types of instances and for this case the \emph{t2.micro} instances were used.
+These are the smallest instances provided and we could achieve higher performance on larger instances,
+ but they were chosen because they are Free Tier eligible.
+Video conversion itself is mostly CPU intensive, so the instances with 2.5GHz and 1 GB of memory could be outperformed by larger instances.
 
 %Describe general workload
+A specially designed workload generator creates a new task at a regular interval and offers this task to the system using the input bucket.
+The task can either be a completely new task or with a certain chance be a task already offered to the system before.
+The tasks consist of encoding a movie from one format to another format.
 
 %Describe monitoring tools and libraries
-
+To monitor the system \emph{The Simple Logging Facade for Java} (SLF4J) in combination with \emph{Log4J} were used, which allowed optimal and tunable logging.
+SLF4J provides a facade for Log4J to allow other logging backends to be configured at runtime.
+For this specific case simple logging output was employed to measure the performance and other statistics of the system.
 %other tools
 
 \subsection{Experiments}
+
 %Desribe the experiments per system feature
 %Format: describe workload, present operation, analyze result.
-\subsubsection{Provisioning}
+\subsubsection{Automation}
+No specific experiments were ran to test the automation of the proposed system, but the other experiments have shown that a very high level of automation was been achieved.
+To start only a handful of mandatory steps had to be done, after which the system runs completely without manual intervention.
+The first step is to create a EC2 instance which will act as a master instance.
+After that one uploads the code and runs an install script that sets up the master instance.
+The last step is to build the code and run it.
 
-\subsubsection{Allocation}
+\subsubsection{Elasticity}
+
+%Provisioning time
+In our first experiment we wanted to see how long it takes to provision a worker node and how long it takes before it is fully ready to service tasks.
+Our experiment consists of the provisioner provisioning continuously a single worker after the previous worker becomes fully ready.
+The experiment showed that the average and median time of provisioning a fully working node is 2 minutes and 31 seconds.
+The minimum time of provisioning was 2 minutes and the maximum 4 minutes and 47 seconds.
+A note has to be made that the timing is done with a granularity of 15 seconds, because that was the interval we checked if nodes came online.
+But this experiment still gives a very good indication of the time it takes to provision a worker node.
+
+%Elasticity
+The second experiment that was conducted was to have the workload generator generate 100 jobs with a random interval between 10 and 30 seconds.
+The experiment is to test that our provisioner provisions more nodes and terminates these nodes after these 100 jobs are completed.
+At first the system builds a backlog of queues and the provisioner conservatively allocates more workers.
+After 27 minutes all jobs are finished and it can be seen that the provisioner quickly terminates the (now) unnecessary workers.
+While downscaling, a very eager approach is used.
+This helps to optimize for cost.
+At the end a tail can be seen where one worker is kept running.
+This data is plotted in Fig. \ref{fig:100-workers} and Fig. \ref{fig:100-tasks}.
+
+\begin{figure}[ht]
+	\includegraphics[scale=0.5]{fig/100workers.png}
+	\label{fig:100-workers}
+	\caption{Amount of workers}
+\end{figure}
+
+\begin{figure}[ht]
+	\includegraphics[scale=0.5]{fig/100tasks.png}
+	\label{fig:100-tasks}
+	\caption{Amount of queued tasks}
+\end{figure}
+
+\subsubsection{Performance}
+Load balancing is very important to achieve a higher utilization of the VMs.
+Early during the development of the proposed system CPU utilization of the used VMs was measured.
+It was found that ffmpeg is very effective and used the full CPU power during execution.
+As there is no more performance to be gained, scheduling more tasks on a single node could not achieve a higher utilization.
+This was the main reason to let one node only work on one job at once.
 
 \subsubsection{Reliability}
 
