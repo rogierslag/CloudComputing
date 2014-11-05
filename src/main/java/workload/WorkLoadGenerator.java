@@ -28,8 +28,8 @@ public class WorkLoadGenerator implements Runnable {
 	public WorkLoadGenerator(Credentials awsCredentials, Properties properties) {
 		this.inputBucket = properties.getProperty("aws.s3.input", "input");
 		this.newTaskThreshold = Double.valueOf(properties.getProperty("workgenerator.chance_old_task ", "0.3"));
-		this.timeoutMinimum = Integer.valueOf(properties.getProperty("workgenerator.timeout_min_ms ", "3000"));
-		this.timeoutMax = Integer.valueOf(properties.getProperty("workgenerator.timeout_max_ms ", "10000"));
+		this.timeoutMinimum = Integer.valueOf(properties.getProperty("workgenerator.timeout_min_ms", "3000"));
+		this.timeoutMax = Integer.valueOf(properties.getProperty("workgenerator.timeout_max_ms", "10000"));
 
 		s3Client = new AmazonS3Client(awsCredentials);
 	}

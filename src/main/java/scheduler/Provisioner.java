@@ -58,7 +58,17 @@ public class Provisioner {
 		ec2Client = new AmazonEC2Client(awsCredentials);
 		ec2Client.setEndpoint("ec2.eu-west-1.amazonaws.com");
 
+		executorService.scheduleWithFixedDelay(printWorkerSize(), 5, 15, TimeUnit.SECONDS);
 		executorService.scheduleWithFixedDelay(checkForNodeAdjustments(), 5, Integer.parseInt(properties.getProperty("provision.check_load_interval", "15")), TimeUnit.SECONDS);
+	}
+
+	private Runnable printWorkerSize() {
+		return new Runnable() {
+
+			public void run() {
+				log.info("Monitor: #workers: {}.", nodes.size());
+			}
+		};
 	}
 
 	/**
@@ -71,7 +81,6 @@ public class Provisioner {
 		return new Runnable() {
 			@Override
 			public void run() {
-				log.info("Monitor: #workers: {}.", nodes.size());
 				log.trace("Going to check how busy we are");
 				List<Task> waitingTasks = parent.waitingTasks();
 
