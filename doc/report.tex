@@ -3,6 +3,7 @@
 \usepackage{graphicx}
 \usepackage[numbers,square,comma]{natbib}
 \usepackage{hyperref}
+\usepackage{eurosym}
 
 \title{Cloud Computing: \\ Report}
 \author{Steffan Norberhuis\\ 1509306 \and
@@ -229,6 +230,15 @@ While downscaling, a very eager approach is used.
 This helps to optimize for cost.
 At the end a tail can be seen where one worker is kept running.
 This data is plotted in Fig. \ref{fig:100-workers} and Fig. \ref{fig:100-tasks}.
+
+%Cost indication
+Here we give a cost indication of the running costs of the system. 
+This is done by calculating the cost of running the previous example.
+The total time the experiment took was 36 minutes.
+But during this time several machines were used.
+In total the machines were hired for the equivalent of hiring one machine for 31 hours.
+Using the calculation model of Amazon the charged time would be 31 hours and the charged cost would be \euro 3,40.
+
 
 \begin{figure}[ht]
 	\includegraphics[scale=0.5]{fig/100workers.png}
