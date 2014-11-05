@@ -65,6 +65,26 @@ Any source code discussed in this report and the report itself is available publ
 
 \section{Background on Application}
 
+The application has as goal to convert any user submitted video to an MPEG-4 format (note this format is covered by several patents in countries which acknowledge software algorithms patents \cite{mpegla}.
+For this, users can use the existing client software of WantCloud to upload their video to the servers and receive a notification of the same application once the conversion is done.
+In the background, transparent to the user, the video is added to the job list by the scheduler software running on the incoming server.
+This scheduler, together with the part which handles provisioning of VM's on a IaaS-provider, places the job on a server for conversion.
+Due to the nature of video-conversion, a server is considered busy if there is one job running on it, and idle if no job is running on it. 
+No server will handle two jobs at once.
+The provisioner may decide to pin up additional VM's based on several, user-defined, criteria.
+Once the conversion is done, the worker VM uploads the new file to the output server, which then performs a callback on the earlier mentioned client application.\\
+\\
+\textit{Requirements:} For the system to work in production, it should ensure the following requirements are met:
+
+\begin{enumerate}
+\item For the system to work well for WantCloud B.V., it should have a better performance compared to the existing platform, while at the same time it should lower monthly operational costs,
+\item The system should work completely automated, requiring no intervention for any worker nodes, this goes for the autoscaling, handle worker failures, and scheduling.
+\item The system should monitor its own state, both in terms of performance as well as for availability.
+\item The results should remain available for users to re-download, hence durability is important.
+
+\end{enumerate}
+
+
 \section{System Design}
 %Recommended Size 1.5 pages
 
