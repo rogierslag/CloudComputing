@@ -268,6 +268,19 @@ As there is no more performance to be gained, scheduling more tasks on a single 
 This was the main reason to let one node only work on one job at once.
 
 \subsubsection{Reliability}
+To test reliability, we activated the chaos monkey during a similar experiment conducted to test elasticity with a workload of 100 jobs.
+The chaos monkey becomes active every 4 minutes and has a chance of 50\% to let a node fail.
+The results can be seen in \ref{fig:chaos-workers}.
+Here small drops can be seen and at that moments chaos monkey terminated a worker node.
+The system detects failure and reschedules the tasks and continues with the jobs.
+We improved the granularity of the amount of workers to see the effects of the chaos monkey.
+This changes the appearance of the figure from \ref{fig:100-workers}.
+
+\begin{figure}[ht]
+	\includegraphics[scale=0.5]{fig/chaos-workers.png}
+	\label{fig:chaos-workers}
+	\caption{Amount of workers with Chaos monkey activated}
+\end{figure}
 
 \subsubsection{Monitoring components}
 No specific experiments were conducted to test the monitoring components.
