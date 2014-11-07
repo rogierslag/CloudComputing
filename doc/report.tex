@@ -102,7 +102,7 @@ Customers can upload their videos using the application.
 The application (not part of this implementation) uploads the video to an Amazon S3 bucket.
 This bucket is regularly scanned by the master instance, which generates jobs corresponding to a video and places the jobs into a queue.
 The master instance then assigns these jobs to worker nodes, based on a first-come-first-serve principle.
-Once a job is done, the result is saved to another Amazon S3 bucket, where the file is available for download.
+Once a job is done, the result is saved to another Amazon S3 bucket, the output bucket, where the file is available for download.
 
 This approach has multiple advantages.
 First of all, all information is durable and the data will be preserved (even in case all instances go down).
@@ -112,6 +112,8 @@ Multiple users can at the same time upload a video to the input bucket.
 These videos are fairly serviced at a first-come-first-serve principle
 and are processed.
 Scaling of worker nodes ensures that one users does not influences the delay of another user.
+Finally, the output bucket is persistent and never cleared.
+The service results are durable in that way and saved for the years to come.
 
 The master instance consists of several components:
 
