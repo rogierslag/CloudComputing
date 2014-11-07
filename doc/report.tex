@@ -195,6 +195,9 @@ Video conversion itself is mostly CPU intensive, so the instances with 2.5GHz an
 A specially designed workload generator creates a new task at a regular interval and offers this task to the system using the input bucket.
 The task can either be a completely new task or, with a certain chance, be a task earlier offered to the system.
 The tasks consist of encoding a movie from one format to another format.
+The workload generator introduce quite rapidly a high number of tasks for the system
+and can be seen as a large number of users using the system at the same time.
+But without extra information of WantCloud B.V. this cannot be put into perspective.
 
 To monitor the system \emph{The Simple Logging Facade for Java} (SLF4J) in combination with \emph{Log4J} were used, which allowed optimal and tunable logging.
 SLF4J provides a facade for Log4J to allow other logging backends to be configured at runtime.
@@ -276,6 +279,46 @@ No specific experiments were conducted to test the monitoring components.
 But they were used extensively to conduct the other experiments and take measurements.
 
 \section{Discussion}
+The developed system has proven that the application of WantCloud B.V. can be transfered to the Cloud with relative ease.
+This is largely due to the good API and simplicity of using instances provided by Amazon AWS.
+So the development time and cost should not be a reason for WantCloud B.V. for not choosing to use a cloud platform.
+The system can still be improved on multiple areas,
+but it is a very respectable result for the total development time that was put into it.
+
+Failure within cloud platforms are notorious and has to be taken into account during development.
+But the system has shown that reliability and fault recovery can easily be introduced
+and even be a natural part of the system.
+Again, this is not a reason for WantCloud B.V. to not move to the cloud.
+
+Performance is not thorougly tested enough through our experiments that a conclusive decision can be made based upon this criteria.
+On one hand do the worker node achieve high CPU utilization, but on the other hand do the experiment show a continuous build up of tasks.
+This might partially be the provisioning not being aggressive enough in provisioning nodes.
+But could also be a hint that the instances produce not enough performance to handle the workload.
+To really make a decision based upon this criteria more experiments have to be run
+where both a non cloud solution and a cloud solution receive the same, realistic workload.
+The realistic workload can also help produce an accurate estimation of costs as will later be explained not to be possible at the moment.
+
+For development and experimentation the Amazon AWS system was used and during that time numerous instances were used.
+Long experiments were conducted, not all reflected in the paper, that took several hours to complete.
+At some point we let the master instance continuously run during several nights, so we did not have to provision it every time and install the software.
+The choice was made to not use the cheapest instances, but higher tiered instances.
+As they were believed to be more realistic choices.
+This only resulted in a total cost of \$ 5.61 for 437 charged hours.
+Noteworthy is that the costs of storage was only \$0.18.
+This is remarkable,
+ because we used large files and uploaded multiples of these files.
+The rest of the costs is for the instances.
+
+The workload generator simulates multiple users at the same time.
+But without any real information of usage patterns estimating for 100,000/1,000,000/10,000,000 users would be total guess work.
+The calculation of costs per day/month/year depends on the amount of users and required instances and the distribution of size of videos.
+Again this calculation would result in total guess work because it depends on realistic usage information.
+
+The deletion schedule currently optimizes costs with the assumption that lower costs can be achieved when the ratio between provisioning time and production time is minimized. 
+But the schedule can result in a situation where high costs are incurred,
+because the scheduler never runs out of tasks and worker nodes are kept indefinitely alive.
+As was said before some delay is acceptable and lower costs could perhaps be achieved if more worker nodes were terminated at the cost of a higher delay.
+This should be investigated in future experiments.
 
 \section{Conclusion}
 
