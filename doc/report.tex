@@ -101,12 +101,17 @@ The system is designed using a regular client-server model.
 Customers can upload their videos using the application.
 The application (not part of this implementation) uploads the video to an Amazon S3 bucket.
 This bucket is regularly scanned by the master instance, which generates jobs corresponding to a video and places the jobs into a queue.
-The master instance then assigns these jobs to machines, based on a first-come-first-serve principle.
+The master instance then assigns these jobs to worker nodes, based on a first-come-first-serve principle.
 Once a job is done, the result is saved to another Amazon S3 bucket, where the file is available for download.
 
 This approach has multiple advantages.
 First of all, all information is durable and the data will be preserved (even in case all instances go down).
 Secondly one is able to take down the master instance (e.g. for a new deployment) without affecting the customers ability to upload new videos to the system.
+Third, the system achieves the ability for fair multi-tenancy.
+Multiple users can at the same time upload a video to the input bucket.
+These videos are fairly serviced at a first-come-first-serve principle
+and are processed.
+Scaling of worker nodes ensures that one users does not influences the delay of another user.
 
 The master instance consists of several components:
 
@@ -230,10 +235,10 @@ At first the system builds a backlog of jobs and the provisioner conservatively 
 After 27 minutes all jobs are finished and it can be seen that the provisioner quickly terminates the now unnecessary workers.
 While downscaling, a very eager approach is used which helps to optimize for cost.
 At the end a tail can be seen where one worker is kept running.
-This data is plotted in Fig. \ref{fig:100-workers} and Fig. \ef{fig:100-tasks}.
+This data is plotted in Fig. \ref{fig:100-workers} and Fig. \ref{fig:100-tasks}.
 
 Here a cost indication of the running costs of the system is given.
-This is done by calculating the cost of running the previous example.
+This is done by calculating the cost of running the previous experiment.
 The total time the experiment took was 36 minutes.
 But during this time several machines were used.
 In total the machines were hired for the equivalent of hiring one machine for 31 hours.
