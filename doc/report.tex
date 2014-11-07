@@ -45,8 +45,7 @@ Using the \textit{cloud} for these purposes would have several advantages:
 \item Only pay for the number of machines needed at a time.
 \item Flexibility of number of worker nodes (scale up and down quickly)
 \item Economy of scale of the IaaS owner for system administrators and hardware.
-\item Lower up-front costs
-nd hardware failures
+\item Lower up-front costs and less hardware failures
 \end{enumerate}
 
 In this paper the authors propose a solution and present an implementation, complete with benchmarks.
@@ -54,8 +53,9 @@ FFmpeg is used to handle the video conversion itself and Amazon Web Services is 
 The software is developed in Java. For provisioning related activity, SSH is employed.
 
 \textit{Proposed solution}: Using the flexibility of EC2, Amazons cloud computing platform, one can continuously run one instance to monitor the number of requested jobs, the cluster status, and notify customers once their jobs completed.
-This instance therefore performs the roles of \textit{scheduler}, \textit{provisioner}, and \textit{health checker}.
+This instance, the master node, therefore performs the roles of \textit{scheduler}, \textit{provisioner}, and \textit{health checker}.
 The probability this node goes down is low, and in case it goes down it may easily be restarted on any other node.
+More advanced solutions can be developed that will recover from failure of the master node.
 
 Additionally the provisioner can start extra workers, using the API made available by Amazon.
 It does this based on parameters which can easily be modified, such as maximum task to worker ratio, max number of workers, or maximum waiting time.
@@ -74,7 +74,8 @@ Any source code discussed in this report and the report itself is available publ
 \section{Background on Application}
 
 The application has as goal to convert any user submitted video to an MPEG-4 format (note this format is covered by several patents in countries which acknowledge software algorithms patents \cite{mpegla}.
-For this, users can use the existing client software of WantCloud to upload their video to the servers and receive a notification of the same application once the conversion is done.
+Users can use the existing client software of WantCloud to upload their video to the servers and receive a notification of the same application once the conversion is done.
+
 In the background, transparent to the user, the video is added to the job list by the scheduler software running on the incoming server.
 This scheduler, together with the part which handles provisioning of VM's on an IaaS-provider, places the job on a server for conversion.
 Due to the CPU-intensive nature of video-conversion, a server is considered busy if there is one job running on it, and idle if no job is running on it. 
@@ -99,7 +100,7 @@ Once the conversion is done, the worker VM uploads the new file to the output se
 The system is designed using a regular client-server model.
 Customers can upload their videos using the application.
 The application (not part of this implementation) uploads the video to an Amazon S3 bucket.
-This bucket is regularly scanned by the master instance, which generates jobs and places them into a queue.
+This bucket is regularly scanned by the master instance, which generates jobs corresponding to a video and places the jobs into a queue.
 The master instance then assigns these jobs to machines, based on a first-come-first-serve principle.
 Once a job is done, the result is saved to another Amazon S3 bucket, where the file is available for download.
 
@@ -107,7 +108,7 @@ This approach has multiple advantages.
 First of all, all information is durable and the data will be preserved (even in case all instances go down).
 Secondly one is able to take down the master instance (e.g. for a new deployment) without affecting the customers ability to upload new videos to the system.
 
-The server (the master instance) consists of several components:
+The master instance consists of several components:
 
 \begin{enumerate}
 \item
@@ -118,9 +119,9 @@ The first item in the queue is assigned to the next available worker.
 The provisioner:
 this section has the responsibility to monitor the number of workers nodes, spawn new ones when thresholds are met, and handles the creation and termination of worker nodes.
 \item
-An health checker, which is responsible to ensure every node in the cluster is healthy, it requests checks from worker nodes at a regular interval.
+A health checker, which is responsible to ensure every node in the cluster is healthy, it requests checks from worker nodes at a regular interval.
 Once a worker node fails to respond a certain number of checks, it is considered to have failed and is terminated by the provisioner.
-The job of the failed worker node is added to the front of the queue.
+The job of the failed worker node is added to the front of the queue and rescheduled.
 \end{enumerate}
 
 All thresholds and settings are managed by a simple configuration file (`scheduler.properties`).
@@ -129,6 +130,8 @@ The current system is based on Amazon as a provider, but this implementation can
 For simplicity the system has one job list, to which each new job is added.
 Each job keeps track of its status which can be one of the following: `QUEUED`, `STARTED`, `FINISHED`, or `FAILED`.
 Jobs are downloaded from and uploaded to AWS S3 using the AWS SDK, which offers a TransferManager abstraction layer to handle the IO operations to the workers nodes.
+The videos remain in the input bucket and this allows the system to reschedule a job if a worker node fails.
+
 Workers nodes are provisioned using the same SDK and are started by executing a simple script through SSH.
 A worker will then get its source directly from Github, build the Maven project and start running.
 By responding to the health checks, the provisioner is made aware that the start proces has been completed and the node is added to the pool. 
@@ -140,10 +143,11 @@ Each node is required to communicate with the master instance.
 Messages are sent for each assignment (from master to worker), each status update (from worker to master) and for health checks (bidirectional).
 Since all information is gathered at the master instance, this is also the location where statistics regarding performance are stored.
 
-To improve reliability, the assumption is make that a worker node can fail at any given point in time
+To improve reliability, the assumption is made that a worker node can fail at any given point in time
 and the system has to be prepared for this.
 To adequately build the system to handle this, a system called \textit{Chaosmonkey} was introduced.
-Chaosmonkey can be configured to run at a certain interval and with a certain probability, in case it runs it will pick a worker node 
+Chaosmonkey can be configured to run at a certain interval and with a certain probability.
+In the case that Chaosmonkey does run it will pick a worker node 
 and simulate a complete node failure.
 The Chaosmonkey communicates directly with Amazon, so neither the worker nor the master instance know what happened and should simply react to the results of the health check.
 However, it will log its activity to the master instance log, such that an operator can easily see whether a failure was intended.
@@ -168,11 +172,13 @@ As one can see the provisioning scheme is fairly conservative.
 There are several good reasons for this.
 First from talks at WantCloud it was discovered an incidental delay is not problematic.
 Secondly many \textit{eager} provisioning schemes in the cloud suffer from oscillation, where a set of nodes is constantly being created and terminated.
-In the time between their creation and termination, they cannot complete a job (and hence are a waste of resources and money).
+In the time between their creation and termination, they can only complete a few jobs.
+The provisioning time outweighs the production time and hence are a waste of resources and money).
 Hence in this case the decision was made to focus on cost-efficiency over performance.
 
 Once a VM goes idle and there is no new job for it to process, it will be terminated.
-This termination policy is no problem for the node creation policy: since no new node will be started immediately, but the system waits for a node to become free (or at some point will start a new node). Hence the system does not suffer from the oscillation problem.
+This termination policy is no problem for the node creation policy: since no new node will be started immediately, but the system waits for a node to become free (or at some point will start a new node). 
+This solves the oscillation problem for the system.
 
 \section{Experimental Results}
 In this section the experimental setup and the experiments themselves are described.
@@ -181,10 +187,10 @@ Observations and experiments are also included in this section.
 \subsection{Experimental setup}
 
 The system was developed for Amazon AWS and was tested on that platform.
-Amazon AWS provides different types of instances, for this case the \emph{t2.micro} instances were used.
-These are the smallest instances available.
-Higher performance could be achieved on larger instances, but these were chosen since they are eligible for the AWS Free Tier program.
-Video conversion itself is mostly CPU intensive, so the instances with 2.5GHz and 1 GB of memory could be outperformed by larger instances.
+Amazon AWS provides different types of instances, for this case the \emph{t2.medium} instances were used.
+This type was chosen because it is most likely the type that will be used by WantCloud B.V..
+The type has a good balance between performance and cost for the specific type of application used by WantCloud B.V..
+Video conversion itself is mostly CPU intensive, so the instances with 2.5GHz and 1 GB of memory could be outperformed by larger instances or compute optimised instances.
 
 A specially designed workload generator creates a new task at a regular interval and offers this task to the system using the input bucket.
 The task can either be a completely new task or, with a certain chance, be a task earlier offered to the system.
@@ -207,7 +213,7 @@ This sequence takes around one minute once the instance is accessible by SSH.
 
 \subsubsection{Elasticity}
 
-In the first experiment aimed to answer how long it takes to provision a worker node and how long it takes before it is fully ready to service tasks.
+The first experiment aimed to answer how long it takes to provision a worker node and how long it takes before it is fully ready to service tasks.
 The experiment consists of the provisioner provisioning continuously a single worker after the previous worker has become fully ready.
 The experiment showed that the average and median time of provisioning a fully working node is 2 minutes and 31 seconds.
 The minimum time of provisioning was 2 minutes and the maximum 4 minutes and 47 seconds.
@@ -218,12 +224,12 @@ But this experiment still gives a very good indication of the time it takes to p
 The second experiment conducted was to let the workload generator generate 100 jobs with a random delay of 10 to 30 seconds between jobs.
 The experiment is to test that the provisioner provisions more nodes and terminates these nodes after these 100 jobs are completed.
 At first the system builds a backlog of jobs and the provisioner conservatively allocates more workers.
-After 27 minutes all jobs are finished and it can be seen that the provisioner quickly terminates the (now) unnecessary workers.
+After 27 minutes all jobs are finished and it can be seen that the provisioner quickly terminates the now unnecessary workers.
 While downscaling, a very eager approach is used which helps to optimize for cost.
 At the end a tail can be seen where one worker is kept running.
-This data is plotted in Fig. \ref{fig:100-workers} and Fig. \ref{fig:100-tasks}.
+This data is plotted in Fig. \ref{fig:100-workers} and Fig. \ef{fig:100-tasks}.
 
-Here a cost indication of the running costs of the system is give.
+Here a cost indication of the running costs of the system is given.
 This is done by calculating the cost of running the previous example.
 The total time the experiment took was 36 minutes.
 But during this time several machines were used.
@@ -252,12 +258,12 @@ This was the main reason to let one node only work on one job at once.
 
 \subsubsection{Reliability}
 To test reliability, Chaosmonkey was activated during a similar experiment conducted to test the elasticity with a workload of 100 jobs.
-The chaosmonkey performs a run every 4 minutes with a chance of 50\% to let a node fail.
-The results can be seen in \ref{fig:chaos-workers}.
-Here small drops can be seen and at that moments chaosmonkey terminated a worker node.
+The Chaosmonkey performs a run every 4 minutes with a chance of 50\% to let a node fail.
+The results can be seen in Fig. \ref{fig:chaos-workers}.
+Here small drops can be seen and at that moments Chaosmonkey terminated a worker node.
 The system detects failure and reschedules the tasks and continues with the jobs.
-Afterwards the the granularity of the amount of workers was improved to see the effects of the chaosmonkey.
-This changes the appearance of the figure from \ref{fig:100-workers}.
+Afterwards the granularity of the amount of workers was improved to see the effects of the Chaosmonkey.
+This changes the appearance of the figure from Fig. \ref{fig:100-workers}.
 
 \begin{figure}[ht]
 	\includegraphics[scale=0.45]{fig/chaos-workers.png}
@@ -275,19 +281,14 @@ But they were used extensively to conduct the other experiments and take measure
 
 In this report, a elastic cloud based system was proposed to handle different kinds of video conversion.
 Consequently, the performance and costs were analyzed for a representative test set using Amazon Web Services as an IaaS provider.
-\\
-\\
 From the results in the experimental section one can see that the provisioning is done conservatively, whereas the termination of nodes is done eagerly.
 This provides a nice optimization for costs.
-\\
-\\
+
 On the other hand, once a node has been provisioned it will continue to perform jobs until there is no more work for it. 
 This will allow the system to fully utilize the node in order to minimize the non-production time (the time between one started paying for the computing power and the moment the node could start its first job).
 This timespan is mostly dependent on the cloud provider and the method of provisioning.
 Using very simple software on the nodes, the installation of the node can be done in around one minute.
 Another minute is needed to actually \textit{lease} the machine from the provider, in this case Amazon.
-\\
-\\
 \bibliography{bibliography}
 \bibliographystyle{unsrtnat}
 \appendix
